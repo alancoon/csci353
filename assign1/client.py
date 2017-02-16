@@ -25,7 +25,7 @@ def client():
 			flag = word[1].lower()
 			next_word = sys.argv[index + 1]
 			if (flag == 's'):
-				serverIP = next_word
+				server_IP = next_word
 			elif (flag == 'p'):
 				port = int(next_word)
 			elif (flag == 'l'):
@@ -37,7 +37,7 @@ def client():
 	client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 	# The server's address and port.
-	addr = (serverIP, port)
+	addr = (server_IP, port)
 
 	# Send a registration message.
 	registration = 'register ' + client_name
@@ -47,9 +47,13 @@ def client():
 	thread_receive = []
 	thread_send = []
 
+	# Start the receivers.
 	for receivers in range(5):
 		thread_receive.append(threading.Thread(target = client_receive, args = (client_name, )))
 		thread_receive[-1].start()
+	print client_name + ' waiting for messages...'
+
+	# Start the senders.
 	for senders in range(1):
 		thread_send.append(threading.Thread(target = client_send, args = (client_name, addr)))
 		thread_send[-1].start()
