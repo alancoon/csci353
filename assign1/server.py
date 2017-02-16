@@ -57,12 +57,35 @@ def server():
     while True:
         data, addr = server_socket.recvfrom(2048)
 
+        # If the data is empty then break.
         if not data:
             break
-        reply = 'Ok... ' + data
-        server_socket.sendto(reply, addr)
+        # Otherwise we have received a message of importance... probably.
+        else:
+            split_data = data.split()
+            # Skip over this while loop iteration if the split data is empty,
+            # because it really shouldn't be as we checked if data was empty.
+            if not split_data: continue
+            keyword = split_data[0].lower()
 
-        print '[' + str(addr[0]) + ':' + str(addr[1]) + '] - ' + data.strip()
+            # If the keyword is register, let's add the client to the books.
+            if (keyword == 'register'):
+                client_name = split_data[1]
+                sockets.append(addr)
+                username_to_socket[client_name] = addr
+                socket_to_username[addr] = client_name
+                welcome = 'welcome ' + client_name
+                server_socket.sendto(welcome, addr)
+
+            # If the keyword is sendto, they are sending a direct message to a client.
+            elif (keyword == 'sendto'):
+                # Let's grab what we need.
+                target_client = split_data[1]
+                message_text = split_data[3:]
+                target_address = username_to_socket[target_client]
+                source_client = socket_to_username[addr]
+                formatted_message = '[' + source_client + ']: ' + message_text
+                client_socket.sendto(formatted_message, target_address)
 
 
     # But close if the True loop ever gets broken.
@@ -144,8 +167,9 @@ def server():
 
     server_socket.close()
 '''
-def sendto (server_socket, target_username, message):
-    '''
+
+#def sendto (server_socket, target_username, message):
+'''
     if username_to_socket[target_username]:
         target_socket = username_to_socket[target_username]
         try:
@@ -154,7 +178,7 @@ def sendto (server_socket, target_username, message):
             target_socket.close()
             if target_socket in open_sockets:
                 open_sockets.remove(target_socket)
-    '''
+'''
 
 
 # broadcast chat messages to all connected clients
