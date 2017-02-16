@@ -4,14 +4,15 @@ import sys
 import socket
 import select
 
-# Host...?
-host = '' 
-# List of all the sockets.
-sockets = []
+# List of all the other servers.
+servers = []
+# List of all the clients.
+clients = []
 # Translates client names to their respective socket.
 username_to_socket = {}
 # Translates a socket to its respective client's username.
 socket_to_username = {}
+
 
 def server():
     # If we don't get exactly 9 arguments, then we print the instructions and exit.
@@ -29,13 +30,17 @@ def server():
             flag = word[1].lower()
             next_word = sys.argv[index + 1]
             if (flag == 's'):
-                server_overlay_IP
-
+                server_overlay_IP = next_word
+            elif (flag == 'o'):
+                overlayport = int(next_word)
             elif (flag == 'p'):
                 port = int(next_word)
             elif (flag == 'l'):
                 logfile = next_word
 
+    '''
+    Establish UDP socket for local clients to communicate with.
+    '''
     # Establish the server socket.  Also make sure the socket is reusable?
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -48,16 +53,31 @@ def server():
 
     # Bind the remote socket to server socket.
     try:
-        listen_addr = (host, port)
+        listen_addr = (server_overlay_IP, port)
         server_socket.bind(listen_addr)
-        print 'Server started on ' + '127.0.0.1' + ' at port ' + str(port) 
+        print 'Server started on ' + server_overlay_IP + ' at port ' + str(port) 
     except socket.error, se:
-        print 'Socket bind failed. Error: ' + str(se[0]) + ': ' + se[1] 
+        print 'UDP socket bind failed. Error: ' + str(se[0]) + ': ' + se[1] 
         print 'terminating server'
         sys.exit()
 
-    # Add the server socket to our list of sockets.
-    sockets.append(server_socket)
+
+    '''
+    Establish TCP socket for other servers to communicate with.
+    '''
+    # Establish the interserver socket.
+    try:
+        inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        inter_server_socket.bind((server_overlay_IP, overlayport))
+        inter_server_socket.listen(5)
+    except socket.error, se:
+        print 'TCP socket bind failed. Error: ' + str(se[0]) + ': ' + se[1]
+        print 'terminating server'
+        sys.exit()
+
+
+    # Add the server socket to our list of clients.
+    # clients.append(server_socket)
 
     # Field requests forever?
     while True:
@@ -78,7 +98,7 @@ def server():
             # If the keyword is register, let's add the client to the books.
             if (keyword == 'register'):
                 client_name = split_data[1]
-                sockets.append(addr)
+                clients.append(addr)
                 username_to_socket[client_name] = addr
                 socket_to_username[addr] = client_name
                 welcome = 'welcome ' + client_name
@@ -104,25 +124,6 @@ def server():
     # But close if the True loop ever gets broken.
     server_socket.close()
 
-
-
-
-
-# broadcast chat messages to all connected clients
-def broadcast (server_socket, sock, message):
-    '''
-    for socket in open_sockets:
-        # send the message only to peer
-        if socket != server_socket and socket != sock :
-            try :
-                socket.send(message)
-            except :
-                # broken socket connection
-                socket.close()
-                # broken socket, remove it
-                if socket in open_sockets:
-                    open_sockets.remove(socket)
-    '''
 
 
 if __name__ == "__main__":
