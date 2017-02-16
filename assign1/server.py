@@ -4,10 +4,15 @@ import sys
 import socket
 import select
 
-host = '127.0.0.1' 
-open_sockets = []
+# Host...?
+host = '' 
+# List of all the sockets.
+sockets = []
+# Translates client names to their respective socket.
 username_to_socket = {}
+# Translates a socket to its respective client's username.
 socket_to_username = {}
+
 def server():
     # If we don't get exactly 5 arguments, then we print the instructions and exit.
     if (len(sys.argv) != 5):
@@ -22,14 +27,49 @@ def server():
             flag = word[1].lower()
             next_word = sys.argv[index + 1]
             if (flag == 'p'):
-                port_string = next_word
-                port = int(port_string)
-                print 'port_string', port_string
+                port = int(next_word)
             elif (flag == 'l'):
                 logfile = next_word
-                print 'logfile', logfile
 
-    # Establish the server socket.
+    # Establish the server socket.  Also make sure the socket is reusable?
+    try:
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        print 'Server socket established.'
+    except socket.error, se:
+        print 'Server socket failed to establish. Error: ' + str(se[0]) + ': ' + se[1]
+        sys.exit()
+
+
+    # Bind the remote socket to server socket.
+    try:
+        listen_addr = (host, port)
+        server_socket.bind(listen_addr)
+        print 'Server socket bound to host/port.'
+    except socket.error, se:
+        print 'Socket bind failed. Error: ' + str(se[0]) + ': ' + se[1] 
+        sys.exit()
+
+    # Add the server socket to our list of sockets.
+    sockets.append(server_socket)
+
+    # Field requests forever?
+    while True:
+        data, addr = server_socket.recvfrom(2048)
+
+        if not data:
+            break
+        reply = 'Ok... ' + data
+        server_socket.sendto(reply, addr)
+
+        print '[' + str(addr[0]) + ':' + str(addr[1]) + '] - ' + data.strip()
+
+
+    # But close if the True loop ever gets broken.
+    server_socket.close()
+
+
+'''
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((host, port))
@@ -41,6 +81,7 @@ def server():
     # Print: server started on <1.2.3.4> at port <12345>...
     print "Server started on " + host + " at port " + str(port)
  
+    
     while True:
 
         # get the list sockets which are ready to be read through select
@@ -102,8 +143,9 @@ def server():
                     continue
 
     server_socket.close()
-    
+'''
 def sendto (server_socket, target_username, message):
+    '''
     if username_to_socket[target_username]:
         target_socket = username_to_socket[target_username]
         try:
@@ -112,10 +154,12 @@ def sendto (server_socket, target_username, message):
             target_socket.close()
             if target_socket in open_sockets:
                 open_sockets.remove(target_socket)
+    '''
 
 
 # broadcast chat messages to all connected clients
 def broadcast (server_socket, sock, message):
+    '''
     for socket in open_sockets:
         # send the message only to peer
         if socket != server_socket and socket != sock :
@@ -127,6 +171,8 @@ def broadcast (server_socket, sock, message):
                 # broken socket, remove it
                 if socket in open_sockets:
                     open_sockets.remove(socket)
- 
+    '''
+
+
 if __name__ == "__main__":
     sys.exit(server())

@@ -22,21 +22,24 @@ def client():
 			next_word = sys.argv[index + 1]
 			if (flag == 's'):
 				serverIP = next_word
-				print 'serverIP', serverIP
 			elif (flag == 'p'):
-				port_string = next_word
-				port = int(port_string)
-				print 'port_string', port_string
+				port = int(next_word)
 			elif (flag == 'l'):
 				logfile = next_word
-				print 'logfile', logfile
 			elif (flag == 'n'):
 				client_name = next_word
-				print 'client_name', client_name
 
 	# Establish the socket.
-	client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	 
+	client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+	data = "Wow I really fucking hate myself and my shitty life."
+	addr = (serverIP, port)
+
+	client_socket.sendto(data, addr)
+
+
+
+'''	 
 	# Attempt connection on the established socket.
 	try :
 		client_socket.connect((serverIP, port))
@@ -114,7 +117,8 @@ def client():
 				# At the very end...
 				# Display the input prompt.
 				sys.stdout.write('[' + client_name + ']: ')
-				sys.stdout.flush() 
+				sys.stdout.flush()
+''' 
 if __name__ == "__main__":
 
 	sys.exit(client())
