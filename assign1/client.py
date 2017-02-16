@@ -11,11 +11,7 @@ def client():
 	global client_socket
 	# If we don't get 9 arguments, print the instructions and exit.
 	if (len(sys.argv) != 9):
-		print 'client -s serverIP -p portno -l logfile -n myname'
-		print '\t-s <serverIP> indicates the serverIP address'
-		print '\t-p <portno> indicates the server port number'
-		print '\t-l <logfile> name of the logfile'
-		print '\t-n <myname> indicates client name'
+		print_instructions()
 		sys.exit()
 
 	# Parse through the arguments to find the host IP, the port number, the log file, and the client's
@@ -32,6 +28,9 @@ def client():
 				logfile = next_word
 			elif (flag == 'n'):
 				client_name = next_word
+			else:
+				print_instructions()
+				sys.exit()
 
 	# Establish the socket.
 	client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -113,5 +112,12 @@ def perform (user_input, client_socket, address):
 		print 'sendto <client\'s name> message <your message>'
 		return
 
+def print_instructions ():
+	print 'client -s serverIP -p portno -l logfile -n myname'
+	print '\t-s <serverIP> indicates the serverIP address'
+	print '\t-p <portno> indicates the server port number'
+	print '\t-l <logfile> name of the logfile'
+	print '\t-n <myname> indicates client name'
+	
 if __name__ == "__main__":
 	sys.exit(client())
