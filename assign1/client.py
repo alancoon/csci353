@@ -165,7 +165,7 @@ def print_instructions ():
 
 def print_goodbye ():
 	global client_name
-	print 'exit'
+	# print 'exit'
 
 def close_log ():
     global log

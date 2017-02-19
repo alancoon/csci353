@@ -20,48 +20,59 @@ socket_to_username = {}
 global server_socket
 
 # Server socket for inter-server communication.
-global inter_server_socket
+global outgoing_inter_server_socket
+global incoming_inter_server_socket
     
 # Log file should be global so it can be closed.
 global log
 
 def server():
     global server_socket
-    global inter_server_socket
+    global outgoing_inter_server_socket
+    global incoming_inter_server_socket
     global log
 
     server_socket = None
-    inter_server_socket= None
+    outgoing_inter_server_socket= None
+    incoming_inter_server_socket = None
     log = None
 
     # If we don't get exactly 9 arguments, then we print the instructions and exit.
-    if (len(sys.argv) != 5 and len(sys.argv) != 9):
-        print_instructions()
-        sys.exit()
+    #if (len(sys.argv) != 5 and len(sys.argv) != 9):
+    #    print_instructions()
+    #    sys.exit()
 
     # Parse through the arguments and determine what the port number and the log file are.
     server_overlay_IP = '127.0.0.1' 
     overlayport = None
+    remote_overlayport = None
+
     for index, word in enumerate(sys.argv):
         if (word[0] == '-'):
             flag = word[1].lower()
             next_word = sys.argv[index + 1]
             if (flag == 's'):
+                '''
                 if (len(sys.argv) == 5):
                     print_instructions()
                     sys.exit()
                 else:
-                    server_overlay_IP = next_word
+                '''
+                server_overlay_IP = next_word
             elif (flag == 'o'):
+                '''
                 if (len(sys.argv) == 5):
                     print_instructions()
                     sys.exit()
                 else:
-                    overlayport = int(next_word)
+                '''
+                overlayport = int(next_word)
             elif (flag == 'p'):
                 port = int(next_word)
             elif (flag == 'l'):
                 logfile = next_word
+            elif (flag == 't'):
+                remote_overlayport = int(next_word)
             else:
                 print_instructions()
                 sys.exit() 
@@ -102,14 +113,33 @@ def server():
 
         # Establish the interserver socket.
         try:
-            inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            inter_server_socket.bind((server_overlay_IP, overlayport))
-            inter_server_socket.listen(5)
+            incoming_inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            outgoing_inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+            incoming_inter_server_socket.bind((server_overlay_IP, overlayport))
+            incoming_inter_server_socket.listen(5)
             print 'server overlay started at port ' + str(overlayport)
             
-        except socket.error, se:
-            print 'TCP socket bind failed. Error: ' + str(se[0]) + ': ' + se[1]
+
+            '''
+            If we were given a remote overlay port, then connect to it.
+            '''
+            if remote_overlayport:
+                try:
+                    print '1'
+                    outgoing_inter_server_socket.connect((server_overlay_IP, remote_overlayport))
+                    print '2'
+                    outgoing_inter_server_socket.send('hello')
+                    print '3'
+                except socket.error, se0:
+                    print 'TCP socket failed to connect to remote overlay. Error: ' + str(se0[0]) + ': ' + se0[1]
+                    sys.exit()
+        except socket.error, se1:
+            print 'TCP socket bind failed. Error: ' + str(se1[0]) + ': ' + se1[1]
             sys.exit()
+
+
+
 
     thread_local = []
     thread_remote = []
@@ -138,7 +168,6 @@ def local_receive ():
 
         # If the data is empty then break.
         if not data:
-            print 'terminating UDP server'
             break
         # Otherwise we have received a message of importance... probably.
         else:
@@ -166,12 +195,10 @@ def local_receive ():
                 print '<DEBUG> SENDTO RECEIVED'
                 # Let's grab what we need.
                 destination_client = split_data[1]
-                source_client = split_data[2]
                 message_text = split_data[3:]
 
                 print data
                 print destination_client
-                print source_client
                 print message_text
 
                 print username_to_socket
@@ -183,6 +210,7 @@ def local_receive ():
                 try:
                     # Fetch address from dictionary mapping client names to addresses.
                     target_address = username_to_socket[destination_client]
+                    source_client = socket_to_username[addr]
 
                     # Write to log.
                     log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"\n')
@@ -201,13 +229,13 @@ def local_receive ():
                         server.send(data)
 
 def remote_receive ():
-    global inter_server_socket
+    global incoming_inter_server_socket
     global log
     # Field requests forever?
     while True:
         # Get a connection.
         print 'remote_receive loop'
-        connection, address = inter_server_socket.accept()
+        connection, address = incoming_inter_server_socket.accept()
         print 'connection accepted'
         servers.append(connection)
         print servers
@@ -234,11 +262,14 @@ def close_log ():
 
 def close_sockets ():
     global server_socket
-    global inter_server_socket
+    global incoming_inter_server_socket
+    global outgoing_inter_server_socket
     if (server_socket):
         server_socket.close()
-    if (inter_server_socket):
-        inter_server_socket.close()
+    if (incoming_inter_server_socket):
+        incoming_inter_server_socket.close()
+    if (outgoing_inter_server_socket):
+        outgoing_inter_server_socket.close()
 
 def clean_up():
     close_log()
