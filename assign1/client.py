@@ -5,6 +5,7 @@ import socket
 import select
 import threading
 import time
+import os
 
 global client_name
 global client_socket
@@ -78,7 +79,7 @@ def client():
 
 	# Loop forever (until exit prompt).
 	while True:
-		time.sleep(1000)
+		time.sleep(2)
 
 def client_receive ():
 	global client_name
@@ -130,7 +131,7 @@ def perform (user_input, client_socket, address):
 	if (keyword == 'exit'):
 		print client_name + '# exit'
 		log.close()
-		sys.exit()
+		os._exit(1)
 
 	# It looks like they want to send a message to someone.
 	elif (keyword == 'sendto'):
@@ -148,11 +149,18 @@ def perform (user_input, client_socket, address):
 		# The rest must be the text of their message.
 		message_text = split_input[3:] 
 
+		# Write to file.
+		log.write('sendto ' + target_client + ' ' + str(message_text))
+
 		# Repackage the message to include sender name instead of message literal.
-		repackaged_message = 'sendto ' + target_client + ' ' + client_name + ' ' + str(message_text)
-		
+		repackaged_message = 'sendto ' + target_client + ' ' + client_name 
+		joined_message_text = ' '.join(map(str, message_text))
+		combined = repackaged_message + joined_message_text
+		#for word in message_text:
+		#	repackaged_message += ' ' + str(word)
+
 		# Send it on its merry way.
-		client_socket.sendto(repackaged_message, address)
+		client_socket.sendto(combined, address)
 
 	# I have no idea what this dude is saying, let's give him some instructions.
 	else: 
@@ -192,7 +200,7 @@ def main ():
 	try:
 		client()
 	except KeyboardInterrupt:
-		raise
+		pass
 	finally:
 		clean_up()
 

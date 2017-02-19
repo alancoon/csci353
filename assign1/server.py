@@ -5,6 +5,7 @@ import socket
 import select
 import threading
 import time
+import os
 
 # List of all the other servers.
 servers = []
@@ -104,7 +105,7 @@ def server():
             inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             inter_server_socket.bind((server_overlay_IP, overlayport))
             inter_server_socket.listen(5)
-            print 'server started on ' + server_overlay_IP + ' at port ' + str(overlayport)
+            print 'server overlay started at port ' + str(overlayport)
             
         except socket.error, se:
             print 'TCP socket bind failed. Error: ' + str(se[0]) + ': ' + se[1]
@@ -126,7 +127,7 @@ def server():
 
     # Loop forever (until keyboard interrupt).
     while True:
-        time.sleep(100)
+        time.sleep(2)
 
 def local_receive ():
     global server_socket
@@ -164,12 +165,13 @@ def local_receive ():
             elif (keyword == 'sendto'):
                 # Let's grab what we need.
                 destination_client = split_data[1]
+                source_client = split_data[2]
                 message_text = split_data[3:]
 
                 # We need a try catch in case the target client doesn't exist.
                 try:
                     target_address = username_to_socket[destination_client]
-                    source_client = split_data[2]
+                    print 'target address fetched ' + target_address
 
                     # Write to log.
                     log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + message_text + '\"\n')
@@ -225,13 +227,13 @@ def clean_up():
     close_log()
     close_sockets()
 
+
 def main ():
     try:
         server()
     except KeyboardInterrupt:
-        raise
-    finally:
         clean_up()
+        os._exit(1)
 
 if __name__ == "__main__":
     main()
