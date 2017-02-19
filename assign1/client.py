@@ -4,10 +4,12 @@ import sys
 import socket
 import select
 import threading
+import time
 
 global client_name
 global client_socket
 global log
+
 
 def client():
 	global client_name
@@ -64,7 +66,7 @@ def client():
 	thread_send = []
 
 	# Start the receivers.
-	for receivers in range(5):
+	for receivers in range(1):
 		thread_receive.append(threading.Thread(target = client_receive))
 		thread_receive[-1].start()
 	print client_name + '# waiting for messages...'
@@ -74,14 +76,15 @@ def client():
 		thread_send.append(threading.Thread(target = client_send, args = (addr, )))
 		thread_send[-1].start()
 
-	print 'set up done'
-	while 1:
-		continue
+	# Loop forever (until exit prompt).
+	while True:
+		time.sleep(1000)
 
 def client_receive ():
 	global client_name
 	global client_socket
 	global log
+
 	while True:
 		received = client_socket.recv(2048)
 		if received:
@@ -96,23 +99,25 @@ def client_receive ():
 			elif (keyword == 'sendto'):
 				source_name = split_received[2] # Change the message literal to the source name.
 				message_text = split_received[3:]
-				print client_name + '# recvfrom ' + source_name + ' ' + message_text
+				print client_name + '# recvfrom ' + source_name + ' ' + message_text 
 				#sys.stdout.write('\n' + received)
 				#sys.stdout.write('[' + client_name + ']: ')
 				#sys.stdout.flush()
-
+		
 def client_send (address):
 	global client_name
-	global client_socket
+	global client_socket 
+
 	while True:
 		# Display a prompt:
 		#sys.stdout.write('[' + client_name + ']: ')
 		#sys.stdout.flush()
 		user_input = sys.stdin.readline()
-
 		perform(user_input, client_socket, address)
 
+
 def perform (user_input, client_socket, address):
+	global client_name, log
 	# Determine what the user wants by splitting the user input and inspecting the first
 	# keyword.
 	split_input = user_input.split()
@@ -123,7 +128,9 @@ def perform (user_input, client_socket, address):
 	# If the first word is exit, then disconnect.
 	keyword = split_input[0].lower()
 	if (keyword == 'exit'):
-		clean_up()
+		print client_name + '# exit'
+		log.close()
+		sys.exit()
 
 	# It looks like they want to send a message to someone.
 	elif (keyword == 'sendto'):
@@ -142,7 +149,7 @@ def perform (user_input, client_socket, address):
 		message_text = split_input[3:] 
 
 		# Repackage the message to include sender name instead of message literal.
-		repackaged_message = 'sendto ' + target_client + ' ' + client_name + ' ' + message_text
+		repackaged_message = 'sendto ' + target_client + ' ' + client_name + ' ' + str(message_text)
 		
 		# Send it on its merry way.
 		client_socket.sendto(repackaged_message, address)
@@ -169,6 +176,7 @@ def close_log ():
         log.write('terminating client...\n')
         log.close()
 
+
 def close_sockets ():
     global client_socket
     if (client_socket):
@@ -182,12 +190,10 @@ def clean_up ():
 
 def main ():
 	try:
-		print 'try'
 		client()
 	except KeyboardInterrupt:
 		raise
 	finally:
-		print 'clean up'
 		clean_up()
 
 if __name__ == "__main__":

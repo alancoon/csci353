@@ -4,6 +4,7 @@ import sys
 import socket
 import select
 import threading
+import time
 
 # List of all the other servers.
 servers = []
@@ -113,19 +114,20 @@ def server():
     thread_remote = []
 
     # Start the local receivers.
-    for local_receivers in range(5):
+    for local_receivers in range(1):
         thread_local.append(threading.Thread(target = local_receive))
         thread_local[-1].start()
 
     # Start the remote receivers, again, only if we have a server overlay IP and overlay port.
     if (server_overlay_IP and overlayport):
-        for remote_receivers in range(5):
+        for remote_receivers in range(1):
             thread_remote.append(threading.Thread(target = remote_receive))
             thread_remote[-1].start()
 
+    # Loop forever (until keyboard interrupt).
     while True:
-        continue
-        
+        time.sleep(100)
+
 def local_receive ():
     global server_socket
     global log
@@ -197,8 +199,6 @@ def remote_receive ():
             break
         else:
             print data
-
-    # connection.close()
 
 def print_instructions ():
     print 'server [-s serveroverlayIP -o overlayport] -p portno -l logfile'
