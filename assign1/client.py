@@ -5,10 +5,19 @@ import socket
 import select
 import threading
 
-global client_socket;
+global client_name
+global client_socket
+global log
 
 def client():
+	global client_name
 	global client_socket
+	global log
+
+	client_name = None
+	client_socket = None
+	log = None
+
 	# If we don't get 9 arguments, print the instructions and exit.
 	if (len(sys.argv) != 9):
 		print_instructions()
@@ -32,14 +41,22 @@ def client():
 				print_instructions()
 				sys.exit()
 
+	# Set up the log file.
+	try:
+		log = open(logfile, 'w')
+	except:
+		print 'Error opening file: ' + logfile
+
 	# Establish the socket.
 	client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	log.write('connecting to the server ' + server_IP + ' at port ' + str(port) + '\n')
 
 	# The server's address and port.
 	addr = (server_IP, port)
 
 	# Send a registration message.
 	registration = 'register ' + client_name
+	log.write('sending register message ' + client_name + '\n')
 	client_socket.sendto(registration, addr)
 
 	# Loop forever.
@@ -48,33 +65,49 @@ def client():
 
 	# Start the receivers.
 	for receivers in range(5):
-		thread_receive.append(threading.Thread(target = client_receive, args = (client_name, )))
+		thread_receive.append(threading.Thread(target = client_receive))
 		thread_receive[-1].start()
-	print client_name + ' waiting for messages...'
+	print client_name + '# waiting for messages...'
 
 	# Start the senders.
 	for senders in range(1):
-		thread_send.append(threading.Thread(target = client_send, args = (client_name, addr)))
+		thread_send.append(threading.Thread(target = client_send, args = (addr, )))
 		thread_send[-1].start()
 
 	# client_socket.close()
 
-def client_receive (client_name):
+def client_receive ():
+	global client_name
 	global client_socket
+	global log
 	while True:
 		received = client_socket.recv(2048)
 		if received:
-			sys.stdout.write('\n' + received)
-			sys.stdout.write('[' + client_name + ']: ')
-			sys.stdout.flush()
+			split_received = received.split()
+			if not split_received:
+				return
+			keyword = split_received[0].lower()
 
-def client_send (client_name, address):
+			if (keyword == 'welcome'):
+				print client_name + '# connected to server and registered'
+				log.write('received welcome\n')
+			elif (keyword == 'sendto'):
+				source_name = split_received[2] # Change the message literal to the source name.
+				message_text = split_received[3:]
+				print client_name + '# recvfrom ' + source_name + ' ' + message_text
+				#sys.stdout.write('\n' + received)
+				#sys.stdout.write('[' + client_name + ']: ')
+				#sys.stdout.flush()
+
+def client_send (address):
+	global client_name
 	global client_socket
 	while True:
 		# Display a prompt:
-		sys.stdout.write('[' + client_name + ']: ')
-		sys.stdout.flush()
+		#sys.stdout.write('[' + client_name + ']: ')
+		#sys.stdout.flush()
 		user_input = sys.stdin.readline()
+
 		perform(user_input, client_socket, address)
 
 def perform (user_input, client_socket, address):
@@ -86,13 +119,12 @@ def perform (user_input, client_socket, address):
 		return
 
 	# If the first word is exit, then disconnect.
-	if (split_input[0].lower() == 'exit'):
-		print '\nYou have disconnected, later.'
-		#client_socket.close()
+	keyword = split_input[0].lower()
+	if (keyword == 'exit'):
 		sys.exit()
 
 	# It looks like they want to send a message to someone.
-	elif (split_input[0].lower() == 'sendto'):
+	elif (keyword == 'sendto'):
 		for index, word in enumerate(split_input):
 			if index == 1:
 				# Parse out the target of the message.
@@ -103,9 +135,15 @@ def perform (user_input, client_socket, address):
 				if (message_literal != 'message'):
 					print 'sendto <client\'s name> message <your message>'
 					return
+
 		# The rest must be the text of their message.
 		message_text = split_input[3:] 
-		client_socket.sendto(user_input, address)
+
+		# Repackage the message to include sender name instead of message literal.
+		repackaged_message = 'sendto ' + target_client + ' ' + client_name + ' ' + message_text
+		
+		# Send it on its merry way.
+		client_socket.sendto(repackaged_message, address)
 
 	# I have no idea what this dude is saying, let's give him some instructions.
 	else: 
@@ -118,6 +156,36 @@ def print_instructions ():
 	print '\t-p <portno> indicates the server port number'
 	print '\t-l <logfile> name of the logfile'
 	print '\t-n <myname> indicates client name'
-	
+
+def print_goodbye ():
+	global client_name
+	print client_name + '# exit'
+
+def close_log ():
+    global log
+    if (log):
+        log.write('terminating client...\n')
+        log.close()
+
+def close_sockets ():
+    global client_socket
+    if (client_socket):
+    	client_socket.close()
+
+def clean_up ():
+	print_goodbye()
+	close_log()
+	close_sockets()
+
+def main ():
+	try:
+		print 'try'
+		client()
+	except KeyboardInterrupt:
+		raise
+	finally:
+		print 'clean up'
+		clean_up()
+
 if __name__ == "__main__":
-	sys.exit(client())
+	main()

@@ -19,17 +19,24 @@ global server_socket
 
 # Server socket for inter-server communication.
 global inter_server_socket
+    
+# Log file should be global so it can be closed.
+global log
 
 def server():
     global server_socket
     global inter_server_socket
-    print 'If we don\'t get exactly 9 arguments, then we print the instructions and exit.'
+    global log
+
+    server_socket = None
+    inter_server_socket= None
+    log = None
+
     # If we don't get exactly 9 arguments, then we print the instructions and exit.
     if (len(sys.argv) != 5 and len(sys.argv) != 9):
         print_instructions()
         sys.exit()
 
-    print 'Parse through the arguments and determine what the port number and the log file are.'
     # Parse through the arguments and determine what the port number and the log file are.
     server_overlay_IP = '127.0.0.1' 
     overlayport = None
@@ -58,33 +65,33 @@ def server():
                 sys.exit() 
 
     '''
-    Establish UDP socket for local clients to communicate with.
+    Set up the log file for I/O.
     '''
-    print 'Establish UDP socket for local clients to communicate with.'
+    try:
+        log = open(logfile, 'w')
+    except:
+        print 'Error trying to open file: ' + logfile
 
-    # Establish the server socket.  Also make sure the socket is reusable?
+    '''
+    Establish UDP server socket for local clients to communicate with.
+    '''
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        print 'Server socket established.'
     except socket.error, se:
         print 'Server socket failed to establish. Error: ' + str(se[0]) + ': ' + se[1]
-        print 'terminating UDP server'
         sys.exit()
 
     # Bind the remote socket to server socket.
     try:
         listen_addr = (server_overlay_IP, port)
         server_socket.bind(listen_addr)
-        print 'Server started on ' + server_overlay_IP + ' at port ' + str(port) 
+        print 'server started on ' + server_overlay_IP + ' at port ' + str(port) + '...' 
+        log.write('server started on ' + server_overlay_IP + ' at port ' + str(port) + '...\n')
     except socket.error, se:
         print 'UDP socket bind failed. Error: ' + str(se[0]) + ': ' + se[1] 
-        print 'terminating UDP server'
         sys.exit()
 
-
-    print 'Establish TCP socket for other servers to communicate with.'
-    print 'ONLY IF the server overlay IP and overlay port are specified.'
     '''
     Establish TCP socket for other servers to communicate with.
     ONLY IF the server overlay IP and overlay port are specified.
@@ -96,15 +103,11 @@ def server():
             inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             inter_server_socket.bind((server_overlay_IP, overlayport))
             inter_server_socket.listen(5)
-            print 'Server started on ' + server_overlay_IP + ' at port ' + str(overlayport)
+            print 'server started on ' + server_overlay_IP + ' at port ' + str(overlayport)
+            
         except socket.error, se:
             print 'TCP socket bind failed. Error: ' + str(se[0]) + ': ' + se[1]
-            print 'terminating TCP server'
             sys.exit()
-
-
-    # Add the server socket to our list of clients.
-    # clients.append(server_socket)
 
     thread_local = []
     thread_remote = []
@@ -120,12 +123,9 @@ def server():
             thread_remote.append(threading.Thread(target = remote_receive))
             thread_remote[-1].start()
 
-    print '>>>>>>>> DONE <<<<<<<<<'
-    # But close if the True loop ever gets broken.
-    # server_socket.close()
-
 def local_receive ():
     global server_socket
+    global log
     # Field requests forever?
     while True:
         data, addr = server_socket.recvfrom(2048)
@@ -150,40 +150,50 @@ def local_receive ():
                 socket_to_username[addr] = client_name
                 welcome = 'welcome ' + client_name
                 server_socket.sendto(welcome, addr)
-                print client_name + ' regsitered from host ' + addr[0] + ' port ' + str(addr[1])
 
+                print client_name + ' regsitered from host ' + addr[0] + ' port ' + str(addr[1])
+                log.write('received register ' + client_name + ' from host ' + addr[0] + ' port ' + str(addr[1]) + '\n')  
             # If the keyword is sendto, they are sending a direct message to a client.
             elif (keyword == 'sendto'):
                 # Let's grab what we need.
                 destination_client = split_data[1]
                 message_text = split_data[3:]
+
                 # We need a try catch in case the target client doesn't exist.
                 try:
                     target_address = username_to_socket[destination_client]
-                    source_client = socket_to_username[addr]
-                    formatted_message = '[' + source_client + ']: ' + str(message_text)
-                    server_socket.sendto(formatted_message, target_address)
+                    source_client = split_data[2]
+
+                    # Write to log.
+                    log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + message_text + '\"\n')
+
+                    # Forward the data.
+                    server_socket.sendto(data, target_address)
+                    
                 except:
-                    print destination_client + ' not registered with server'
+                    log.write(destination_client + ' not registered with server\n')
+                    log.write('sending message to server overlay \"' + str(message_text) + '\"\n')
+
+                    for server in servers:
+                        server.send()
 
 def remote_receive ():
-    global inter_server_socketa
+    global inter_server_socket
+    global log
     # Field requests forever?
     while True:
         # Get a connection.
         connection, address = inter_server_socket.accept()
+        servers.append(connection)
 
         # Check for data.
         data = connection.recv(2048).strip()
         if not data:
-            print 'terminating TCP server'
             break
         else:
             print data
 
     connection.close()
-
-
 
 def print_instructions ():
     print 'server [-s serveroverlayIP -o overlayport] -p portno -l logfile'
@@ -192,6 +202,31 @@ def print_instructions ():
     print '\t-p <portno> the port number for the chat server'
     print '\t-l <logfile> name of the logfile'
 
+def close_log ():
+    global log
+    if (log):
+        log.write('terminating server...\n')
+        log.close()
+
+def close_sockets ():
+    global server_socket
+    global inter_server_socket
+    if (server_socket):
+        server_socket.close()
+    if (inter_server_socket):
+        inter_server_socket.close()
+
+def clean_up():
+    close_log()
+    close_sockets()
+
+def main ():
+    try:
+        server()
+    except KeyboardInterrupt:
+        raise
+    finally:
+        clean_up()
+
 if __name__ == "__main__":
-    print 'terminating entire server'
-    sys.exit(server())
+    main()
