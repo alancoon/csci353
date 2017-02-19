@@ -163,28 +163,42 @@ def local_receive ():
                 log.write('received register ' + client_name + ' from host ' + addr[0] + ' port ' + str(addr[1]) + '\n')  
             # If the keyword is sendto, they are sending a direct message to a client.
             elif (keyword == 'sendto'):
+                print '<DEBUG> SENDTO RECEIVED'
                 # Let's grab what we need.
                 destination_client = split_data[1]
                 source_client = split_data[2]
                 message_text = split_data[3:]
 
+                print data
+                print destination_client
+                print source_client
+                print message_text
+
+                print username_to_socket
+                print socket_to_username
+
+
+                target_address = username_to_socket[destination_client]
                 # We need a try catch in case the target client doesn't exist.
                 try:
+                    # Fetch address from dictionary mapping client names to addresses.
                     target_address = username_to_socket[destination_client]
-                    print 'target address fetched ' + target_address
 
                     # Write to log.
-                    log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + message_text + '\"\n')
+                    log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"\n')
+                    log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + str(message_text) + '\"\n')
 
                     # Forward the data.
-                    server_socket.sendto(data, target_address)
+                    reformatted_data = 'recvfrom ' + source_client + ' message ' + str(message_text)
+                    server_socket.sendto(reformatted_data, target_address)
 
                 except:
+                    # There was an issue fetching the address, writing to log, or sending the data.
                     log.write(destination_client + ' not registered with server\n')
                     log.write('sending message to server overlay \"' + str(message_text) + '\"\n')
 
                     for server in servers:
-                        server.send()
+                        server.send(data)
 
 def remote_receive ():
     global inter_server_socket
@@ -192,8 +206,11 @@ def remote_receive ():
     # Field requests forever?
     while True:
         # Get a connection.
+        print 'remote_receive loop'
         connection, address = inter_server_socket.accept()
+        print 'connection accepted'
         servers.append(connection)
+        print servers
 
         # Check for data.
         data = connection.recv(2048).strip()

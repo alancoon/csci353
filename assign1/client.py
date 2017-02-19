@@ -95,15 +95,14 @@ def client_receive ():
 			keyword = split_received[0].lower()
 
 			if (keyword == 'welcome'):
-				print client_name + '# connected to server and registered'
+				print 'connected to server and registered'
 				log.write('received welcome\n')
-			elif (keyword == 'sendto'):
-				source_name = split_received[2] # Change the message literal to the source name.
+			elif (keyword == 'recvfrom'):
+				source_name = split_received[1] 
 				message_text = split_received[3:]
-				print client_name + '# recvfrom ' + source_name + ' ' + message_text 
-				#sys.stdout.write('\n' + received)
-				#sys.stdout.write('[' + client_name + ']: ')
-				#sys.stdout.flush()
+				print 'recvfrom ' + source_name + ' ' + str(message_text)  
+			sys.stdout.write(client_name + '# ')
+			sys.stdout.flush()
 		
 def client_send (address):
 	global client_name
@@ -111,8 +110,8 @@ def client_send (address):
 
 	while True:
 		# Display a prompt:
-		#sys.stdout.write('[' + client_name + ']: ')
-		#sys.stdout.flush()
+		sys.stdout.write(client_name + '# ')
+		sys.stdout.flush()
 		user_input = sys.stdin.readline()
 		perform(user_input, client_socket, address)
 
@@ -129,9 +128,7 @@ def perform (user_input, client_socket, address):
 	# If the first word is exit, then disconnect.
 	keyword = split_input[0].lower()
 	if (keyword == 'exit'):
-		print client_name + '# exit'
-		log.close()
-		os._exit(1)
+		clean_up()
 
 	# It looks like they want to send a message to someone.
 	elif (keyword == 'sendto'):
@@ -139,32 +136,24 @@ def perform (user_input, client_socket, address):
 			if index == 1:
 				# Parse out the target of the message.
 				target_client = word
-			elif index == 2:
-				# Did they include the 'message' part of the command?
-				message_literal = word.lower()
-				if (message_literal != 'message'):
-					print 'sendto <client\'s name> message <your message>'
-					return
 
 		# The rest must be the text of their message.
-		message_text = split_input[3:] 
+		message_text = split_input[2:]
 
 		# Write to file.
 		log.write('sendto ' + target_client + ' ' + str(message_text))
 
 		# Repackage the message to include sender name instead of message literal.
-		repackaged_message = 'sendto ' + target_client + ' ' + client_name 
+		repackaged_message = 'sendto ' + target_client + ' message '
 		joined_message_text = ' '.join(map(str, message_text))
 		combined = repackaged_message + joined_message_text
-		#for word in message_text:
-		#	repackaged_message += ' ' + str(word)
 
 		# Send it on its merry way.
 		client_socket.sendto(combined, address)
 
 	# I have no idea what this dude is saying, let's give him some instructions.
 	else: 
-		print 'sendto <client\'s name> message <your message>'
+		print 'sendto <client\'s name> <your message>'
 		return
 
 def print_instructions ():
@@ -176,7 +165,7 @@ def print_instructions ():
 
 def print_goodbye ():
 	global client_name
-	print client_name + '# exit'
+	print 'exit'
 
 def close_log ():
     global log
@@ -194,13 +183,14 @@ def clean_up ():
 	print_goodbye()
 	close_log()
 	close_sockets()
-	sys.exit()
+	os._exit(1)
+
 
 def main ():
 	try:
 		client()
 	except KeyboardInterrupt:
-		pass
+		clean_up()
 	finally:
 		clean_up()
 
