@@ -123,6 +123,9 @@ def server():
             thread_remote.append(threading.Thread(target = remote_receive))
             thread_remote[-1].start()
 
+    while True:
+        continue
+        
 def local_receive ():
     global server_socket
     global log
@@ -148,6 +151,8 @@ def local_receive ():
                 clients.append(addr)
                 username_to_socket[client_name] = addr
                 socket_to_username[addr] = client_name
+
+                # Formulate welcome response.
                 welcome = 'welcome ' + client_name
                 server_socket.sendto(welcome, addr)
 
@@ -169,7 +174,7 @@ def local_receive ():
 
                     # Forward the data.
                     server_socket.sendto(data, target_address)
-                    
+
                 except:
                     log.write(destination_client + ' not registered with server\n')
                     log.write('sending message to server overlay \"' + str(message_text) + '\"\n')
@@ -193,7 +198,7 @@ def remote_receive ():
         else:
             print data
 
-    connection.close()
+    # connection.close()
 
 def print_instructions ():
     print 'server [-s serveroverlayIP -o overlayport] -p portno -l logfile'

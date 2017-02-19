@@ -74,7 +74,9 @@ def client():
 		thread_send.append(threading.Thread(target = client_send, args = (addr, )))
 		thread_send[-1].start()
 
-	# client_socket.close()
+	print 'set up done'
+	while 1:
+		continue
 
 def client_receive ():
 	global client_name
@@ -121,7 +123,7 @@ def perform (user_input, client_socket, address):
 	# If the first word is exit, then disconnect.
 	keyword = split_input[0].lower()
 	if (keyword == 'exit'):
-		sys.exit()
+		clean_up()
 
 	# It looks like they want to send a message to someone.
 	elif (keyword == 'sendto'):
@@ -176,6 +178,7 @@ def clean_up ():
 	print_goodbye()
 	close_log()
 	close_sockets()
+	sys.exit()
 
 def main ():
 	try:
