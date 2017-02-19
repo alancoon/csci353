@@ -115,7 +115,7 @@ def server():
         try:
             incoming_inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             outgoing_inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+            incoming_inter_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             incoming_inter_server_socket.bind((server_overlay_IP, overlayport))
             incoming_inter_server_socket.listen(5)
             print 'server overlay started at port ' + str(overlayport)
@@ -126,11 +126,7 @@ def server():
             '''
             if remote_overlayport:
                 try:
-                    print '1'
                     outgoing_inter_server_socket.connect((server_overlay_IP, remote_overlayport))
-                    print '2'
-                    outgoing_inter_server_socket.send('hello')
-                    print '3'
                 except socket.error, se0:
                     print 'TCP socket failed to connect to remote overlay. Error: ' + str(se0[0]) + ': ' + se0[1]
                     sys.exit()
@@ -204,8 +200,6 @@ def local_receive ():
                 print username_to_socket
                 print socket_to_username
 
-
-                target_address = username_to_socket[destination_client]
                 # We need a try catch in case the target client doesn't exist.
                 try:
                     # Fetch address from dictionary mapping client names to addresses.
@@ -225,27 +219,47 @@ def local_receive ():
                     log.write(destination_client + ' not registered with server\n')
                     log.write('sending message to server overlay \"' + str(message_text) + '\"\n')
 
+                    # Since this is the origin server, we don't need to worry about self-loops.
+                    reformatted_data = 'sendto ' + destination_client + ' for ' + source_client + ' ' + str(message_text)
                     for server in servers:
-                        server.send(data)
+                        server.send(reformatted_data)
 
 def remote_receive ():
     global incoming_inter_server_socket
     global log
     # Field requests forever?
     while True:
+        ready_to_read, ready_to_write, in_error = select.select(servers, [], [], 0)
+        
         # Get a connection.
         print 'remote_receive loop'
         connection, address = incoming_inter_server_socket.accept()
         print 'connection accepted'
         servers.append(connection)
         print servers
-
+        
+        
         # Check for data.
         data = connection.recv(2048).strip()
         if not data:
             break
         else:
-            print data
+            split_data = data.split()
+            keyword = split_data[0]
+            if (keyword == 'sendto'):
+                destination_client = split_data[1]
+                source_client = split_data[3]
+                message_text = split_data[4:]
+
+                try:
+                    destination_address = username_to_socket[destination_client]
+                    reformatted_data = 'recvfrom ' + source_client + ' message ' + str(message_text)
+                    server_socket.sendto(reformatted_data, destination_address)
+                except:
+                    # Doesn't exist in this server.
+                    for server in servers:
+                        if (server != connection):
+                            server.send(data)
 
 def print_instructions ():
     print 'server [-s serveroverlayIP -o overlayport] -p portno -l logfile'
