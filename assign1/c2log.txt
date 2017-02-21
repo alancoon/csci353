@@ -1,4 +1,0 @@
-connecting to the server 127.0.0.1 at port 9001
-sending register message Client2
-received welcome
-sendto Client1 ['hello']terminating client...

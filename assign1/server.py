@@ -8,7 +8,7 @@ import time
 import os
 
 # List of all the other servers.
-servers = []
+socket_list = []
 # List of all the clients.
 clients = []
 # Translates client names to their respective socket.
@@ -20,21 +20,21 @@ socket_to_username = {}
 global server_socket
 
 # Server socket for inter-server communication.
-global outgoing_inter_server_socket
-global incoming_inter_server_socket
+global shipper
+global harbor
     
 # Log file should be global so it can be closed.
 global log
 
 def server():
     global server_socket
-    global outgoing_inter_server_socket
-    global incoming_inter_server_socket
+    global shipper
+    global harbor
     global log
 
     server_socket = None
-    outgoing_inter_server_socket= None
-    incoming_inter_server_socket = None
+    shipper= None
+    harbor = None
     log = None
 
     # If we don't get exactly 9 arguments, then we print the instructions and exit.
@@ -113,11 +113,14 @@ def server():
 
         # Establish the interserver socket.
         try:
-            incoming_inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            outgoing_inter_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            incoming_inter_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            incoming_inter_server_socket.bind((server_overlay_IP, overlayport))
-            incoming_inter_server_socket.listen(5)
+            harbor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            shipper = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            harbor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            harbor.bind((server_overlay_IP, overlayport))
+            harbor.listen(5)
+
+
+            socket_list.append(harbor)
             print 'server overlay started at port ' + str(overlayport)
             
 
@@ -126,7 +129,7 @@ def server():
             '''
             if remote_overlayport:
                 try:
-                    outgoing_inter_server_socket.connect((server_overlay_IP, remote_overlayport))
+                    shipper.connect((server_overlay_IP, remote_overlayport))
                 except socket.error, se0:
                     print 'TCP socket failed to connect to remote overlay. Error: ' + str(se0[0]) + ': ' + se0[1]
                     sys.exit()
@@ -188,23 +191,18 @@ def local_receive ():
                 log.write('received register ' + client_name + ' from host ' + addr[0] + ' port ' + str(addr[1]) + '\n')  
             # If the keyword is sendto, they are sending a direct message to a client.
             elif (keyword == 'sendto'):
-                print '<DEBUG> SENDTO RECEIVED'
                 # Let's grab what we need.
                 destination_client = split_data[1]
                 message_text = split_data[3:]
-
-                print data
-                print destination_client
-                print message_text
-
-                print username_to_socket
                 print socket_to_username
 
                 # We need a try catch in case the target client doesn't exist.
                 try:
+                    print socket_to_username
+                    print username_to_socket
+                    source_client = socket_to_username[addr]
                     # Fetch address from dictionary mapping client names to addresses.
                     target_address = username_to_socket[destination_client]
-                    source_client = socket_to_username[addr]
 
                     # Write to log.
                     log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"\n')
@@ -221,24 +219,82 @@ def local_receive ():
 
                     # Since this is the origin server, we don't need to worry about self-loops.
                     reformatted_data = 'sendto ' + destination_client + ' for ' + source_client + ' ' + str(message_text)
-                    for server in servers:
-                        server.send(reformatted_data)
+                    for server in socket_list:
+                        print server
+                        shipper.send(reformatted_data)
 
 def remote_receive ():
-    global incoming_inter_server_socket
+    global harbor
     global log
     # Field requests forever?
     while True:
-        ready_to_read, ready_to_write, in_error = select.select(servers, [], [], 0)
-        
+        time.sleep(1)
+
+        ready_to_read, ready_to_write, in_error = select.select(socket_list, [], [], 0)
+
+        '''
         # Get a connection.
         print 'remote_receive loop'
-        connection, address = incoming_inter_server_socket.accept()
+        connection, address = harbor.accept()
         print 'connection accepted'
         servers.append(connection)
         print servers
-        
-        
+        '''
+
+        # print ready_to_read
+
+        for sock in ready_to_read:
+            print 'iterate'
+
+            if sock == harbor:
+                new_socket, address = harbor.accept()
+                socket_list.append(new_socket)
+                print str(address) + ' connected'
+            else:
+                data = sock.recv(2048).strip()
+                if data:
+                    split_data = data.split()
+                    keyword = split_data[0]
+                    if (keyword == 'sendto'):
+                        destination_client = split_data[1]
+                        source_client = split_data[3]
+                        message_text = split_data[4:]
+                        log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"')
+
+                        try:
+                            destination_address = username_to_socket[destination_client]
+                            reformatted_data = 'recvfrom ' + source_client + ' message ' + str(message_text)
+                            server_socket.sendto(reformatted_data, destination_address)
+                            log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + str(message_text) + '\"')
+                        except:
+                            # Doesn't exist in this server.
+                            print 'DOESNT EXIST HERE, FORWARDING'
+
+                            print socket_list
+                            print 'shipper'
+                            print shipper
+                            print 'harbor'
+                            print harbor
+
+                            for server in socket_list:
+                                print 'THESE ARE MY SERVERS'
+                                print server
+                                # if (server != sock):
+                                try:
+                                    shipper.send(data)
+                                    print 'shipper sent'
+                                except:
+                                    print 'shipper failed'
+                                try:
+                                    harbor.send(data)
+                                    print 'harbor sent'
+                                except:
+                                    print 'harbor failed'
+                else:
+                    if sock in socket_list:
+                        socket_list.remove(sock)
+
+        '''
         # Check for data.
         data = connection.recv(2048).strip()
         if not data:
@@ -260,6 +316,7 @@ def remote_receive ():
                     for server in servers:
                         if (server != connection):
                             server.send(data)
+        '''
 
 def print_instructions ():
     print 'server [-s serveroverlayIP -o overlayport] -p portno -l logfile'
@@ -276,14 +333,14 @@ def close_log ():
 
 def close_sockets ():
     global server_socket
-    global incoming_inter_server_socket
-    global outgoing_inter_server_socket
+    global harbor
+    global shipper
     if (server_socket):
         server_socket.close()
-    if (incoming_inter_server_socket):
-        incoming_inter_server_socket.close()
-    if (outgoing_inter_server_socket):
-        outgoing_inter_server_socket.close()
+    if (harbor):
+        harbor.close()
+    if (shipper):
+        shipper.close()
 
 def clean_up():
     close_log()
