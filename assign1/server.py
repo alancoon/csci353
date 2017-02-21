@@ -130,6 +130,7 @@ def server():
             if remote_overlayport:
                 try:
                     shipper.connect((server_overlay_IP, remote_overlayport))
+                    socket_list.append(shipper)
                 except socket.error, se0:
                     print 'TCP socket failed to connect to remote overlay. Error: ' + str(se0[0]) + ': ' + se0[1]
                     sys.exit()
@@ -220,8 +221,11 @@ def local_receive ():
                     # Since this is the origin server, we don't need to worry about self-loops.
                     reformatted_data = 'sendto ' + destination_client + ' for ' + source_client + ' ' + str(message_text)
                     for server in socket_list:
+                        print 'I GOT A MESSAGE FROM A CLIENT BUT I CANNOT LOCATE THE TARGET LOCALLY'
                         print server
-                        shipper.send(reformatted_data)
+                        socket_list[0].send(reformatted_data)
+                        socket_list[1].send(reformatted_data)
+                        #shipper.send(reformatted_data)
 
 def remote_receive ():
     global harbor
@@ -248,11 +252,22 @@ def remote_receive ():
 
             if sock == harbor:
                 new_socket, address = harbor.accept()
+                new_socket.send('greet')
+                print 'new socket send greet'
+                print 'new socket'
+                print new_socket
+                print 'address'
+                print address
+                print 'harbor'
+                print harbor
+
                 socket_list.append(new_socket)
                 print str(address) + ' connected'
             else:
                 data = sock.recv(2048).strip()
                 if data:
+                    print "DATA:"
+                    print data
                     split_data = data.split()
                     keyword = split_data[0]
                     if (keyword == 'sendto'):
@@ -290,6 +305,8 @@ def remote_receive ():
                                     print 'harbor sent'
                                 except:
                                     print 'harbor failed'
+                    elif (keyword == 'greet'):
+                        print 'GREET RECEIVED SOCKET WORKS' 
                 else:
                     if sock in socket_list:
                         socket_list.remove(sock)
