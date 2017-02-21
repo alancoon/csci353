@@ -120,7 +120,7 @@ def server():
             harbor.listen(5)
 
 
-            socket_list.append(harbor)
+            # socket_list.append(harbor)
             print 'server overlay started at port ' + str(overlayport)
             
 
@@ -131,6 +131,9 @@ def server():
                 try:
                     shipper.connect((server_overlay_IP, remote_overlayport))
                     socket_list.append(shipper)
+                    print 'str len socket list' + str(len(socket_list))
+                    print shipper
+
                 except socket.error, se0:
                     print 'TCP socket failed to connect to remote overlay. Error: ' + str(se0[0]) + ': ' + se0[1]
                     sys.exit()
@@ -141,23 +144,28 @@ def server():
 
 
 
+
     thread_local = []
     thread_remote = []
 
     # Start the local receivers.
-    for local_receivers in range(1):
-        thread_local.append(threading.Thread(target = local_receive))
-        thread_local[-1].start()
+    thread_local = threading.Thread(target = local_receive)
+    thread_local.start()
 
-    # Start the remote receivers, again, only if we have a server overlay IP and overlay port.
-    if (server_overlay_IP and overlayport):
-        for remote_receivers in range(1):
-            thread_remote.append(threading.Thread(target = remote_receive))
-            thread_remote[-1].start()
-
-    # Loop forever (until keyboard interrupt).
     while True:
-        time.sleep(2)
+        print 'loop for accepting harbor requests'
+        sock, address = harbor.accept()
+        print 'len: ' + str(len(socket_list))
+
+        socket_list.append(sock)
+        print 'len: ' + str(len(socket_list))
+
+        t = threading.Thread(target = remote_receive, args = (sock, ))
+        t.start()
+
+        print 'spawned'
+        # spawn a new thread that listens on sock
+    
 
 def local_receive ():
     global server_socket
@@ -217,123 +225,60 @@ def local_receive ():
                     # There was an issue fetching the address, writing to log, or sending the data.
                     log.write(destination_client + ' not registered with server\n')
                     log.write('sending message to server overlay \"' + str(message_text) + '\"\n')
-
+                    source_client = socket_to_username[addr]
                     # Since this is the origin server, we don't need to worry about self-loops.
                     reformatted_data = 'sendto ' + destination_client + ' for ' + source_client + ' ' + str(message_text)
+                    print str(len(socket_list))
                     for server in socket_list:
                         print 'I GOT A MESSAGE FROM A CLIENT BUT I CANNOT LOCATE THE TARGET LOCALLY'
                         print server
-                        socket_list[0].send(reformatted_data)
-                        socket_list[1].send(reformatted_data)
-                        #shipper.send(reformatted_data)
 
-def remote_receive ():
-    global harbor
+                        server.send(reformatted_data)
+                        print 'sent'
+                        #socket_list[0].send(reformatted_data)
+                        #socket_list[1].send(reformatted_data)
+                        #shipper.send(reformatted_data)
+                        # outgoing_inter_server_socket -> shipper
+                        # incoming_"-"" -> harbor
+
+def remote_receive (sock):
+    # global harbor
     global log
     # Field requests forever?
+    print "THIS IS THE REMOTE RECEIVE CALL OPENING"
+    
+    
     while True:
-        time.sleep(1)
-
-        ready_to_read, ready_to_write, in_error = select.select(socket_list, [], [], 0)
-
-        '''
-        # Get a connection.
-        print 'remote_receive loop'
-        connection, address = harbor.accept()
-        print 'connection accepted'
-        servers.append(connection)
-        print servers
-        '''
-
-        # print ready_to_read
-
-        for sock in ready_to_read:
-            print 'iterate'
-
-            if sock == harbor:
-                new_socket, address = harbor.accept()
-                new_socket.send('greet')
-                print 'new socket send greet'
-                print 'new socket'
-                print new_socket
-                print 'address'
-                print address
-                print 'harbor'
-                print harbor
-
-                socket_list.append(new_socket)
-                print str(address) + ' connected'
-            else:
-                data = sock.recv(2048).strip()
-                if data:
-                    print "DATA:"
-                    print data
-                    split_data = data.split()
-                    keyword = split_data[0]
-                    if (keyword == 'sendto'):
-                        destination_client = split_data[1]
-                        source_client = split_data[3]
-                        message_text = split_data[4:]
-                        log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"')
-
-                        try:
-                            destination_address = username_to_socket[destination_client]
-                            reformatted_data = 'recvfrom ' + source_client + ' message ' + str(message_text)
-                            server_socket.sendto(reformatted_data, destination_address)
-                            log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + str(message_text) + '\"')
-                        except:
-                            # Doesn't exist in this server.
-                            print 'DOESNT EXIST HERE, FORWARDING'
-
-                            print socket_list
-                            print 'shipper'
-                            print shipper
-                            print 'harbor'
-                            print harbor
-
-                            for server in socket_list:
-                                print 'THESE ARE MY SERVERS'
-                                print server
-                                # if (server != sock):
-                                try:
-                                    shipper.send(data)
-                                    print 'shipper sent'
-                                except:
-                                    print 'shipper failed'
-                                try:
-                                    harbor.send(data)
-                                    print 'harbor sent'
-                                except:
-                                    print 'harbor failed'
-                    elif (keyword == 'greet'):
-                        print 'GREET RECEIVED SOCKET WORKS' 
-                else:
-                    if sock in socket_list:
-                        socket_list.remove(sock)
-
-        '''
-        # Check for data.
-        data = connection.recv(2048).strip()
-        if not data:
-            break
-        else:
+        print 'remote receive while true'
+        data = sock.recv(2048).strip()
+        if data:
+            print "DATA:"
+            print data
             split_data = data.split()
             keyword = split_data[0]
             if (keyword == 'sendto'):
                 destination_client = split_data[1]
                 source_client = split_data[3]
                 message_text = split_data[4:]
+                log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"')
 
                 try:
                     destination_address = username_to_socket[destination_client]
                     reformatted_data = 'recvfrom ' + source_client + ' message ' + str(message_text)
                     server_socket.sendto(reformatted_data, destination_address)
+                    log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + str(message_text) + '\"')
                 except:
                     # Doesn't exist in this server.
-                    for server in servers:
-                        if (server != connection):
-                            server.send(data)
-        '''
+                    print 'DOESNT EXIST HERE, FORWARDING'
+
+                    for server in socket_list:
+                        print 'forwarding to ' + str(server)
+                        server.send(data)
+
+        else:
+            if sock in socket_list:
+                socket_list.remove(sock)
+
 
 def print_instructions ():
     print 'server [-s serveroverlayIP -o overlayport] -p portno -l logfile'
@@ -362,7 +307,6 @@ def close_sockets ():
 def clean_up():
     close_log()
     close_sockets()
-
 
 def main ():
     try:
