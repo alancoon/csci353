@@ -1,5 +1,11 @@
-# server.py
- 
+#!/usr/bin/env python
+
+'''
+server.py
+Alan Coon
+alancoon@usc.edu
+'''
+
 import sys
 import socket
 import select

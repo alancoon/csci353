@@ -1,4 +1,10 @@
-# client.py
+#!/usr/bin/env python
+
+'''
+client.py
+Alan Coon
+alancoon@usc.edu
+'''
 
 import sys
 import socket
