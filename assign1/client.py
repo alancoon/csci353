@@ -68,7 +68,7 @@ def client():
 	if not valid_combination:
 		print_instructions()
 		sys.exit()
-		
+
 	# Set up the log file.
 	try:
 		log = open('logs/' + logfile, 'w')
@@ -126,8 +126,8 @@ def client_receive ():
 			elif (keyword == 'recvfrom'):
 				source_name = split_received[1] 
 				message_text = split_received[3:]
-				print 'recvfrom ' + source_name + ' ' + str(message_text)  
-				log.write('recvfrom ' + source_name + ' ' + str(message_text) + '\n')
+				print 'recvfrom ' + source_name + ' ' + ' '.join(message_text)  
+				log.write('recvfrom ' + source_name + ' ' + ' '.join(message_text) + '\n')
 			sys.stdout.write(client_name + '# ')
 			sys.stdout.flush()
 		
@@ -168,11 +168,11 @@ def perform (user_input, client_socket, address):
 		message_text = split_input[2:]
 
 		# Write to file.
-		log.write('sendto ' + target_client + ' ' + str(message_text) + '\n')
+		log.write('sendto ' + target_client + ' ' + ' '.join(message_text) + '\n')
 
 		# Repackage the message to include sender name instead of message literal.
 		repackaged_message = 'sendto ' + target_client + ' message '
-		joined_message_text = ' '.join(map(str, message_text))
+  		joined_message_text = ' '.join(message_text)
 		combined = repackaged_message + joined_message_text
 
 		# Send it on its merry way.

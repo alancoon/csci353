@@ -137,6 +137,7 @@ def server():
 			s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 			s.bind((server_overlay_IP, overlayport))
 			s.listen(5)
+			log.write('server overlay started at port ' + str(overlayport))
 	except socket.error, se:
 		print 'Error creating overlay socket: ' + str(se)
 		clean_up()
@@ -184,16 +185,16 @@ def run_remote (sock):
 				destination_client = split_data[1]
 				source_client = split_data[3]
 				message_text = split_data[4:]
-				log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"\n')
+				log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + ' '.join(message_text) + '\"\n')
 				try:
 					destination_address = username_to_socket[destination_client]
-					reformatted_data = 'recvfrom ' + source_client + ' message ' + str(message_text)
+					reformatted_data = 'recvfrom ' + source_client + ' message ' + ' '.join(message_text)
 					server_socket.sendto(reformatted_data, destination_address)
-					log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + str(message_text) + '\"\n')
+					log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + ' '.join(message_text) + '\"\n')
 				except:
 					# Doesn't exist in this server.
 					log.write(destination_client + ' not registered with server\n')
-					log.write('sending message to server overlay \"' + str(message_text) + '\"\n')
+					log.write('sending message to server overlay \"' + ' '.join(message_text) + '\"\n')
 					for server in socket_list:
 						if (server != sock): # Make sure we don't send back to our source.
 											 # Helps avoid self-loops.
@@ -223,7 +224,7 @@ def local_receive ():
 				clients.append(addr)
 				username_to_socket[client_name] = addr
 				socket_to_username[addr] = client_name
-
+				log.write('client connection from host ' + addr[0] + ' port ' + str(addr[1]) + '\n')
 				# Formulate welcome response.
 				welcome = 'welcome ' + client_name
 				server_socket.sendto(welcome, addr)
@@ -243,20 +244,20 @@ def local_receive ():
 					target_address = username_to_socket[destination_client]
 
 					# Write to log.
-					log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"\n')
-					log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + str(message_text) + '\"\n')
+					log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + ' '.join(message_text) + '\"\n')
+					log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + ' '.join(message_text) + '\"\n')
 
 					# Forward the data.
-					reformatted_data = 'recvfrom ' + source_client + ' message ' + str(message_text)
+					reformatted_data = 'recvfrom ' + source_client + ' message ' + ' '.join(message_text)
 					server_socket.sendto(reformatted_data, target_address)
 
 				except:
 					# There was an issue fetching the address, writing to log, or sending the data.
 					log.write(destination_client + ' not registered with server\n')
-					log.write('sending message to server overlay \"' + str(message_text) + '\"\n')
+					log.write('sending message to server overlay \"' + ' '.join(message_text) + '\"\n')
 					source_client = socket_to_username[addr]
 					# Since this is the origin server, we don't need to worry about self-loops.
-					reformatted_data = 'sendto ' + destination_client + ' for ' + source_client + ' ' + str(message_text)
+					reformatted_data = 'sendto ' + destination_client + ' for ' + source_client + ' ' + ' '.join(message_text)
 					for server in socket_list:
 						server.send(reformatted_data)
 
