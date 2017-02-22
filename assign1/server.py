@@ -105,68 +105,39 @@ def server():
         print 'UDP socket bind failed. Error: ' + str(se[0]) + ': ' + se[1] 
         sys.exit()
 
-    '''
-    Establish TCP socket for other servers to communicate with.
-    ONLY IF the server overlay IP and overlay port are specified.
-    '''
-    if server_overlay_IP and overlayport:
-
-        # Establish the interserver socket.
-        try:
-            harbor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            shipper = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            harbor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            harbor.bind((server_overlay_IP, overlayport))
-            harbor.listen(5)
-
-
-            # socket_list.append(harbor)
-            print 'server overlay started at port ' + str(overlayport)
-            
-
-            '''
-            If we were given a remote overlay port, then connect to it.
-            '''
-            if remote_overlayport:
-                try:
-                    shipper.connect((server_overlay_IP, remote_overlayport))
-                    socket_list.append(shipper)
-                    print 'str len socket list' + str(len(socket_list))
-                    print shipper
-
-                except socket.error, se0:
-                    print 'TCP socket failed to connect to remote overlay. Error: ' + str(se0[0]) + ': ' + se0[1]
-                    sys.exit()
-        except socket.error, se1:
-            print 'TCP socket bind failed. Error: ' + str(se1[0]) + ': ' + se1[1]
-            sys.exit()
-
-
-
-
-
-    thread_local = []
-    thread_remote = []
 
     # Start the local receivers.
     thread_local = threading.Thread(target = local_receive)
     thread_local.start()
 
+
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if (server_overlay_IP and overlayport):
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((server_overlay_IP, overlayport))
+        s.listen(5)
+
+    s2 = None
+    if (remote_overlayport):
+        s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s2.connect((server_overlay_IP, remote_overlayport))
+        s2.send('greet')
+        socket_list.append(s2)
+
     while True:
-        print 'loop for accepting harbor requests'
-        sock, address = harbor.accept()
-        print 'len: ' + str(len(socket_list))
+        conn, addr = s.accept()
+        socket_list.append(conn)
+        threading.Thread(target = run_remote, args = (conn, )).start()
 
-        socket_list.append(sock)
-        print 'len: ' + str(len(socket_list))
 
-        t = threading.Thread(target = remote_receive, args = (sock, ))
-        t.start()
 
-        print 'spawned'
-        # spawn a new thread that listens on sock
+def run_remote (sock):
+    print 'run_remote ' + str(sock)
     
 
+
+    
 def local_receive ():
     global server_socket
     global log
@@ -241,46 +212,6 @@ def local_receive ():
                         # outgoing_inter_server_socket -> shipper
                         # incoming_"-"" -> harbor
 
-def remote_receive (sock):
-    # global harbor
-    global log
-    # Field requests forever?
-    print "THIS IS THE REMOTE RECEIVE CALL OPENING"
-    
-    print sock
-    while True:
-        print sock
-        print 'remote receive while true'
-        data = sock.recv(2048).strip()
-        print sock
-        print 'data received something from SOCK'
-        if data:
-            print "DATA:"
-            print data
-            split_data = data.split()
-            keyword = split_data[0]
-            if (keyword == 'sendto'):
-                destination_client = split_data[1]
-                source_client = split_data[3]
-                message_text = split_data[4:]
-                log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"')
-
-                try:
-                    destination_address = username_to_socket[destination_client]
-                    reformatted_data = 'recvfrom ' + source_client + ' message ' + str(message_text)
-                    server_socket.sendto(reformatted_data, destination_address)
-                    log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + str(message_text) + '\"')
-                except:
-                    # Doesn't exist in this server.
-                    print 'DOESNT EXIST HERE, FORWARDING'
-
-                    for server in socket_list:
-                        print 'forwarding to ' + str(server)
-                        server.send(data)
-
-        else:
-            if sock in socket_list:
-                socket_list.remove(sock)
 
 
 def print_instructions ():
