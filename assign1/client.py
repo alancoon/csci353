@@ -21,32 +21,57 @@ def client():
 	client_socket = None
 	log = None
 
-	# If we don't get 9 arguments, print the instructions and exit.
-	if (len(sys.argv) != 9):
-		print_instructions()
-		sys.exit()
-
 	# Parse through the arguments to find the host IP, the port number, the log file, and the client's
 	# chosen username.
+	flag_used = {}
+	flag_used['s'] = False
+	flag_used['p'] = False
+	flag_used['l'] = False
+	flag_used['n'] = False
 	for index, word in enumerate(sys.argv):
 		if (word[0] == '-'):
 			flag = word[1].lower()
-			next_word = sys.argv[index + 1]
+			try:
+				next_word = sys.argv[index + 1]
+				if next_word[0] == '-':
+					raise
+			except:
+				print_instructions()
+				sys.exit()
 			if (flag == 's'):
 				server_IP = next_word
+				flag_used['s'] = True
 			elif (flag == 'p'):
-				port = int(next_word)
+				try:
+					port = int(next_word)
+					if (port < 0 or port > 65535):
+						raise
+					flag_used['p'] = True
+				except:
+					print 'Port must be between 0 and 65535'
+					sys.exit()
 			elif (flag == 'l'):
 				logfile = next_word
+				flag_used['l'] = True
 			elif (flag == 'n'):
 				client_name = next_word
+				flag_used['n'] = True
 			else:
 				print_instructions()
 				sys.exit()
 
+	valid_combination = False
+
+	if (flag_used['s'] and flag_used['p'] and flag_used['l'] and flag_used['n']):
+		valid_combination = True
+
+	if not valid_combination:
+		print_instructions()
+		sys.exit()
+		
 	# Set up the log file.
 	try:
-		log = open(logfile, 'w')
+		log = open('logs/' + logfile, 'w')
 	except:
 		print 'Error opening file: ' + logfile
 
@@ -70,12 +95,12 @@ def client():
 	for receivers in range(1):
 		thread_receive.append(threading.Thread(target = client_receive))
 		thread_receive[-1].start()
-	print client_name + '# waiting for messages...'
 
 	# Start the senders.
 	for senders in range(1):
 		thread_send.append(threading.Thread(target = client_send, args = (addr, )))
 		thread_send[-1].start()
+	
 
 	# Loop forever (until exit prompt).
 	while True:
@@ -96,11 +121,13 @@ def client_receive ():
 
 			if (keyword == 'welcome'):
 				print 'connected to server and registered'
+				print client_name + '# waiting for messages...'
 				log.write('received welcome\n')
 			elif (keyword == 'recvfrom'):
 				source_name = split_received[1] 
 				message_text = split_received[3:]
 				print 'recvfrom ' + source_name + ' ' + str(message_text)  
+				log.write('recvfrom ' + source_name + ' ' + str(message_text) + '\n')
 			sys.stdout.write(client_name + '# ')
 			sys.stdout.flush()
 		
@@ -141,7 +168,7 @@ def perform (user_input, client_socket, address):
 		message_text = split_input[2:]
 
 		# Write to file.
-		log.write('sendto ' + target_client + ' ' + str(message_text))
+		log.write('sendto ' + target_client + ' ' + str(message_text) + '\n')
 
 		# Repackage the message to include sender name instead of message literal.
 		repackaged_message = 'sendto ' + target_client + ' message '
@@ -165,7 +192,6 @@ def print_instructions ():
 
 def print_goodbye ():
 	global client_name
-	# print 'exit'
 
 def close_log ():
     global log
@@ -190,6 +216,7 @@ def main ():
 	try:
 		client()
 	except KeyboardInterrupt:
+		print 'exit'
 		clean_up()
 	finally:
 		clean_up()
