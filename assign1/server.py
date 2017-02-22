@@ -247,10 +247,13 @@ def remote_receive (sock):
     # Field requests forever?
     print "THIS IS THE REMOTE RECEIVE CALL OPENING"
     
-    
+    print sock
     while True:
+        print sock
         print 'remote receive while true'
         data = sock.recv(2048).strip()
+        print sock
+        print 'data received something from SOCK'
         if data:
             print "DATA:"
             print data
