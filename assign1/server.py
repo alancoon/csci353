@@ -111,6 +111,7 @@ def server():
 		log = open('logs/' + logfile, 'w')
 	except:
 		print 'Error trying to open file: ' + logfile
+		print 'Please execute from directory containing logs/ so the program can store logs to it.'
 		sys.exit()
 
 	''' Establish UDP server socket for local clients to communicate with. '''
@@ -143,7 +144,7 @@ def server():
 			s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 			s.bind((server_overlay_IP, overlayport))
 			s.listen(5)
-			log.write('server overlay started at port ' + str(overlayport))
+			log.write('server overlay started at port ' + str(overlayport) + '\n')
 	except socket.error, se:
 		print 'Error creating overlay socket: ' + str(se)
 		clean_up()
@@ -169,6 +170,7 @@ def server():
 				conn, addr = s.accept()
 				socket_list.append(conn)
 				print 'server joined overlay host ' + addr[0] + ' port ' + str(addr[1])
+				log.write('server joined overlay from host ' + addr[0] + ' port ' + str(addr[1]) + '\n')
 				threading.Thread(target = run_remote, args = (conn, )).start()
 		except socket.error, se:
 			print 'Error accepting overlay connections: ' + str(se)
@@ -246,16 +248,15 @@ def local_receive ():
 				# We need a try catch in case the target client doesn't exist.
 				try:
 					source_client = socket_to_username[addr]
+					log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + ' '.join(message_text) + '\"\n')
+
 					# Fetch address from dictionary mapping client names to addresses.
 					target_address = username_to_socket[destination_client]
-
-					# Write to log.
-					log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + ' '.join(message_text) + '\"\n')
-					log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + ' '.join(message_text) + '\"\n')
 
 					# Forward the data.
 					reformatted_data = 'recvfrom ' + source_client + ' message ' + ' '.join(message_text)
 					server_socket.sendto(reformatted_data, target_address)
+					log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + ' '.join(message_text) + '\"\n')
 
 				except:
 					# There was an issue fetching the address, writing to log, or sending the data.

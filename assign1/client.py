@@ -80,6 +80,8 @@ def client():
 		log = open('logs/' + logfile, 'w')
 	except:
 		print 'Error opening file: ' + logfile
+		print 'Please execute from directory containing logs/ so the program can store logs to it.'
+		sys.exit()
 
 	# Establish the socket.
 	client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
