@@ -19,29 +19,23 @@ socket_to_username = {}
 # Server socket for local clients.
 global server_socket
 
-# Server socket for inter-server communication.
-global shipper
-global harbor
-    
 # Log file should be global so it can be closed.
 global log
 
 def server():
     global server_socket
-    global shipper
-    global harbor
     global log
 
     server_socket = None
-    shipper= None
-    harbor = None
     log = None
 
+    '''
     # If we don't get exactly 9 arguments, then we print the instructions and exit.
-    #if (len(sys.argv) != 5 and len(sys.argv) != 9):
-    #    print_instructions()
-    #    sys.exit()
-
+    if (len(sys.argv) != 5 and len(sys.argv) != 9):
+        print_instructions()
+        sys.exit()
+    '''
+    
     # Parse through the arguments and determine what the port number and the log file are.
     server_overlay_IP = '127.0.0.1' 
     overlayport = None
@@ -111,19 +105,20 @@ def server():
     thread_local.start()
 
 
-
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     if (server_overlay_IP and overlayport):
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((server_overlay_IP, overlayport))
         s.listen(5)
 
+
     s2 = None
     if (remote_overlayport):
         s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s2.connect((server_overlay_IP, remote_overlayport))
-        s2.send('greet')
         socket_list.append(s2)
+        threading.Thread(target = run_remote, args = (s2, )).start()
+
 
     while True:
         conn, addr = s.accept()
@@ -133,11 +128,32 @@ def server():
 
 
 def run_remote (sock):
-    print 'run_remote ' + str(sock)
-    
+    while True:
+        data = sock.recv(2048)
+        
+        if not data:
+            pass
+        else:
+            split_data = data.split()
+            keyword = split_data[0]
+            if (keyword == 'sendto'):
+                destination_client = split_data[1]
+                source_client = split_data[3]
+                message_text = split_data[4:]
+                log.write('sendto ' + destination_client + ' for ' + source_client + ' \"' + str(message_text) + '\"')
+                try:
+                    destination_address = username_to_socket[destination_client]
+                    reformatted_data = 'recvfrom ' + source_client + ' message ' + str(message_text)
+                    server_socket.sendto(reformatted_data, destination_address)
+                    log.write('recvfrom ' + source_client + ' to ' + destination_client + ' \"' + str(message_text) + '\"')
+                except:
+                    # Doesn't exist in this server.
+                    for server in socket_list:
+                        if (server != sock): # Make sure we don't send back to our source.
+                                             # Helps avoid self-loops.
+                            print 'forwarding to ' + str(server)
+                            server.send(data)
 
-
-    
 def local_receive ():
     global server_socket
     global log
@@ -199,18 +215,13 @@ def local_receive ():
                     source_client = socket_to_username[addr]
                     # Since this is the origin server, we don't need to worry about self-loops.
                     reformatted_data = 'sendto ' + destination_client + ' for ' + source_client + ' ' + str(message_text)
-                    print str(len(socket_list))
+                    print 'len of socket_list ' + str(len(socket_list))
                     for server in socket_list:
                         print 'I GOT A MESSAGE FROM A CLIENT BUT I CANNOT LOCATE THE TARGET LOCALLY'
                         print server
 
                         server.send(reformatted_data)
                         print 'sent'
-                        #socket_list[0].send(reformatted_data)
-                        #socket_list[1].send(reformatted_data)
-                        #shipper.send(reformatted_data)
-                        # outgoing_inter_server_socket -> shipper
-                        # incoming_"-"" -> harbor
 
 
 
