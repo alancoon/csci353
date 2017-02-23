@@ -129,15 +129,15 @@ def client_receive ():
 
 			if (keyword == 'welcome'):
 				print 'connected to server and registered'
-				print client_name + '# waiting for messages...'
+				# print client_name + '# waiting for messages...'
 				log.write('received welcome\n')
 			elif (keyword == 'recvfrom'):
 				source_name = split_received[1] 
 				message_text = split_received[3:]
 				print 'recvfrom ' + source_name + ' ' + ' '.join(message_text)  
 				log.write('recvfrom ' + source_name + ' ' + ' '.join(message_text) + '\n')
-			sys.stdout.write(client_name + '# ')
-			sys.stdout.flush()
+			# sys.stdout.write(client_name + '# ')
+			# sys.stdout.flush()
 		
 def client_send (address):
 	global client_name
@@ -145,8 +145,8 @@ def client_send (address):
 
 	while True:
 		# Display a prompt:
-		sys.stdout.write(client_name + '# ')
-		sys.stdout.flush()
+		# sys.stdout.write(client_name + '# ')
+		# sys.stdout.flush()
 		user_input = sys.stdin.readline()
 		perform(user_input, client_socket, address)
 
