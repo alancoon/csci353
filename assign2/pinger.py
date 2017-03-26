@@ -77,9 +77,12 @@ def pinger ():
 		print_instructions()
 		sys.exit()
 
-
+	# Print out the pinging statement to the user's terminal.
 	print 'Pinging ' + destination + ' with ' + str(len(payload)) + ' bytes of data \"' + payload + '\":'
+	# We will collect delay statistics in the statistics array.
 	statistics = []
+
+	# We want to send count number of pings.
 	for i in range(int(count)):
 		icmp = socket.getprotobyname('icmp')
 		try:
@@ -91,23 +94,39 @@ def pinger ():
 			else:
 				raise
 		my_id = os.getpid() & 0xFFFF
-		# Hardcode the ping size to 64.
+		
+		# Send out the ping.
 		send_ping(connection, destination, my_id, payload) 
+
 		# Receive with hardcoded timeout of 2.
-		delay = receive_response(connection, my_id, 2)
+		(delay, data) = receive_response(connection, my_id, 2)
 		
 		if delay == -1:
 			# No response, we timed out.
-			print 'No response'
+			print 'Request timeout for ' + destination + ' attempt ' + str(i)
 		else: 
 			# We received a response.
 			milliseconds = int(delay * 1000)
-			no_bytes = 5
+			no_bytes = len(data)
 			TTL = 47
 			connection.close()
-			print '  Reply from ' + destination + ': bytes=' + str(no_bytes) + ' time=' + str(milliseconds) + ' TTL=' + str(TTL)
-			statistics.append(())
+			print '  Reply from ' + destination + ': bytes=' + str(no_bytes) + ' time=' + str(milliseconds) + 'ms TTL=' + str(TTL)
+			statistics.append(milliseconds)
+	
+	# Now that we are all done, print the statistics to the user's terminal.
+	if statistics:
+		print_statistics(destination, count, statistics)
 
+def print_statistics (destination, count, statistics):
+	packets_lost = int(count) - len(statistics)
+	loss_rate = int(float(packets_lost) / float(count) * float(100))
+	minimum = min(statistics)
+	maximum = max(statistics)
+	average = sum(statistics) / len(statistics)
+	print 'Ping statistics for ' + destination + ':'
+	print '  Packets: Sent = ' + str(count) + ', Received = ' + str(len(statistics)) + ', Lost = ' + str(packets_lost) + ' (' + str(loss_rate) + '% loss),'
+	print '  Approximate round trip times in milli-seconds:'
+	print '  Minimum = ' + str(minimum) + 'ms, Maximum = ' + str(maximum) + 'ms, Average = ' + str(average) + 'ms'
 
 def validify_input (flags, d, p, l, c):
 	print flags
@@ -125,19 +144,20 @@ def validify_input (flags, d, p, l, c):
 			print 'destination: ' + d
 		return False
 
-def send_ping (connection, destination, id, payload):
-	destination = socket.gethostbyname(destination)
+def send_ping (connection, destination, my_id, payload):
+	try:
+		destination = socket.gethostbyname(destination)
+	except:
+		print 'Invalid IP or address.'
+		sys.exit()
+
 	packet_size = len(payload) - 8
 	my_checksum = 0
 
-	header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, my_checksum, id, 1)
-	data = struct.pack('d', time.time()) + data
-	print data
-
+	header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, my_checksum, my_id, 1)
+	data = struct.pack('d', time.time()) + payload
 	my_checksum = checksum(header + data)
-
-	header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, socket.htons(my_checksum), id, 1)
-	
+	header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, socket.htons(my_checksum), my_id, 1)
 	packet = header + data
 
 	connection.sendto(packet, (destination, 1)) 
@@ -150,38 +170,36 @@ def receive_response (connection, id, timeout):
 		what_ready = select.select([connection], [], [], time_left)
 		how_long_in_select = (time.time() - started_select)
 		if what_ready[0] == []: # Timeout
-			return -1
+			return (-1, None)
 
 		time_received = time.time()
 		received_packet, addr = connection.recvfrom(1024)
 		icmpHeader = received_packet[20:28]
+		data = received_packet[36:]
 		type, code, checksum, packet_id, sequence = struct.unpack(
 			"bbHHh", icmpHeader
 		)
+
 		if packet_id == id:
 			bytes = struct.calcsize("d")
 			time_sent = struct.unpack("d", received_packet[28:28 + bytes])[0]
-			return time_received - time_sent
+			return (time_received - time_sent, data)
 
 		time_left = time_left - how_long_in_select
 		if time_left <= 0:
-			return -1
+			return (-1, None)
 
-def checksum(source_string):
-	"""
-	I'm not too confident that this is right but testing seems
-	to suggest that it gives the same answers as in_cksum in ping.c
-	"""
+def checksum(data):
 	sum = 0
-	count_to = (len(source_string) / 2) * 2
+	count_to = (len(data) / 2) * 2
 	for count in xrange(0, count_to, 2):
-		this = ord(source_string[count + 1]) * 256 + ord(source_string[count])
+		this = ord(data[count + 1]) * 256 + ord(data[count])
 		sum = sum + this
-		sum = sum & 0xffffffff # Necessary?
+		#sum = sum & 0xffffffff # Necessary?
 
-	if count_to < len(source_string):
-		sum = sum + ord(source_string[len(source_string) - 1])
-		sum = sum & 0xffffffff # Necessary?
+	if count_to < len(data):
+		sum = sum + ord(data[len(data) - 1])
+		#sum = sum & 0xffffffff # Necessary?
 
 	sum = (sum >> 16) + (sum & 0xffff)
 	sum = sum + (sum >> 16)
