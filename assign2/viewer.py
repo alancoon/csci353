@@ -11,6 +11,7 @@ import socket
 import time
 import struct
 
+file = None
 
 def viewer ():
 	# Make a dictionary to keep track of which flags have been used in the 
@@ -68,7 +69,12 @@ def viewer ():
 				sys.exit()
 
 	# Check to see if the user entered a valid combination of flags.
-	check_validity(flag_used, interface, read, count, logfile)
+	valid = check_validity(flag_used, interface, read, count, logfile)
+	if not valid:
+		print_instructions()
+		sys.exit()
+
+
 
 	# Attempt to create the socket using SOCK_RAW.
 	try:
@@ -99,9 +105,16 @@ def viewer ():
 
 
 def check_validity (flags, i, r, c, l):
-	print flags
-	if flags['i']: # and flags['r'] and flags['c']:
-		print 'Validity check passed'
+	if flags['i']:
+		if flags['l']:
+			try:
+				file = open(l, 'w')
+				return True
+			except:
+				print 'Invalid logfile.'
+				return False
+		else:
+			return True
 	else:
 		print 'Validity check failed'
 
@@ -113,8 +126,7 @@ def check_validity (flags, i, r, c, l):
 			print 'count: ' + c
 		if (flags['l']):
 			print 'logfile: ' + l
-		print_instructions()
-		sys.exit()
+		return False
 
 
 def print_instructions ():

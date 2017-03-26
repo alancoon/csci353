@@ -15,6 +15,7 @@ import select
 
 
 ICMP_ECHO_REQUEST = 8
+file = None
 
 def pinger ():
 	# Make a dictionary to keep track of which flags have been used in the 
@@ -131,7 +132,15 @@ def print_statistics (destination, count, statistics):
 def validify_input (flags, d, p, l, c):
 	print flags
 	if flags['c'] and flags['p'] and flags['d']:
-		return True
+		if flags['l']:
+			try:
+				file = open(l, 'w')
+				return True
+			except:
+				print 'Invalid logfile.'
+				return False
+		else:
+			return True
 	else:
 		print 'Validity check failed'
 		if (flags['l']):
