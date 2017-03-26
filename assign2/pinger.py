@@ -13,7 +13,6 @@ import time
 import struct
 import select
 
-
 ICMP_ECHO_REQUEST = 8
 file = None
 
@@ -80,6 +79,8 @@ def pinger ():
 
 	# Print out the pinging statement to the user's terminal.
 	print 'Pinging ' + destination + ' with ' + str(len(payload)) + ' bytes of data \"' + payload + '\":'
+	if file:
+		file.write('Pinging ' + destination + ' with ' + str(len(payload)) + ' bytes of data \"' + payload + '\":\n')
 	# We will collect delay statistics in the statistics array.
 	statistics = []
 
@@ -104,7 +105,9 @@ def pinger ():
 		
 		if delay == -1:
 			# No response, we timed out.
-			print 'Request timeout for ' + destination + ' attempt ' + str(i)
+			print '  Request timeout for ' + destination + ' attempt ' + str(i)
+			if file:
+				file.write('  Request timeout for ' + destination + ' attempt ' + str(i) + '\n')
 		else: 
 			# We received a response.
 			milliseconds = int(delay * 1000)
@@ -112,11 +115,15 @@ def pinger ():
 			TTL = 47
 			connection.close()
 			print '  Reply from ' + destination + ': bytes=' + str(no_bytes) + ' time=' + str(milliseconds) + 'ms TTL=' + str(TTL)
+			if file:
+				file.write('  Reply from ' + destination + ': bytes=' + str(no_bytes) + ' time=' + str(milliseconds) + 'ms TTL=' + str(TTL) + '\n')
 			statistics.append(milliseconds)
 	
 	# Now that we are all done, print the statistics to the user's terminal.
 	if statistics:
 		print_statistics(destination, count, statistics)
+	if file:
+		file.close()
 
 def print_statistics (destination, count, statistics):
 	packets_lost = int(count) - len(statistics)
@@ -128,29 +135,27 @@ def print_statistics (destination, count, statistics):
 	print '  Packets: Sent = ' + str(count) + ', Received = ' + str(len(statistics)) + ', Lost = ' + str(packets_lost) + ' (' + str(loss_rate) + '% loss),'
 	print '  Approximate round trip times in milli-seconds:'
 	print '  Minimum = ' + str(minimum) + 'ms, Maximum = ' + str(maximum) + 'ms, Average = ' + str(average) + 'ms'
+	if file:
+		file.write('Ping statistics for ' + destination + ':\n')
+		file.write('  Packets: Sent = ' + str(count) + ', Received = ' + str(len(statistics)) + ', Lost = ' + str(packets_lost) + ' (' + str(loss_rate) + '% loss),\n')
+		file.write('  Approximate round trip times in milli-seconds:\n')
+		file.write('  Minimum = ' + str(minimum) + 'ms, Maximum = ' + str(maximum) + 'ms, Average = ' + str(average) + 'ms\n')
 
 def validify_input (flags, d, p, l, c):
-	print flags
+	global file
 	if flags['c'] and flags['p'] and flags['d']:
+		if c < 0:
+			print 'Count must be at least 0.'
+			return False
 		if flags['l']:
 			try:
 				file = open(l, 'w')
-				return True
 			except:
 				print 'Invalid logfile.'
 				return False
-		else:
-			return True
+		return True
 	else:
-		print 'Validity check failed'
-		if (flags['l']):
-			print 'logfile: ' + l
-		if (flags['p']):
-			print 'payload: ' + p
-		if (flags['c']):
-			print 'count: ' + c
-		if (flags['d']):
-			print 'destination: ' + d
+		print 'Count, payload, and destination required.'
 		return False
 
 def send_ping (connection, destination, my_id, payload):
@@ -186,12 +191,12 @@ def receive_response (connection, id, timeout):
 		icmpHeader = received_packet[20:28]
 		data = received_packet[36:]
 		type, code, checksum, packet_id, sequence = struct.unpack(
-			"bbHHh", icmpHeader
+			'bbHHh', icmpHeader
 		)
 
 		if packet_id == id:
-			bytes = struct.calcsize("d")
-			time_sent = struct.unpack("d", received_packet[28:28 + bytes])[0]
+			bytes = struct.calcsize('d')
+			time_sent = struct.unpack('d', received_packet[28:28 + bytes])[0]
 			return (time_received - time_sent, data)
 
 		time_left = time_left - how_long_in_select
@@ -221,11 +226,11 @@ def checksum(data):
 	return answer
 
 def print_instructions ():
-	print 'pinger [-l file] -p \"data\" -c N -d IP'
-	print '\t-l, --logfile  Write the debug info to the specified log file'
-	print '\t-p, --payload  The string to include in the payload'
-	print '\t-c, --count    The number of packets used to compute RTT'
+	print 'pinger -d IP -c N -p \"data\" [-l file]'
 	print '\t-d, --dst      The destination IP for the ping message'
+	print '\t-c, --count    The number of packets used to compute RTT'
+	print '\t-p, --payload  The string to include in the payload'
+	print '\t-l, --logfile  Write the debug info to the specified log file'
 
 def main ():
 	pinger()

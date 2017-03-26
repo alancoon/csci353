@@ -10,7 +10,9 @@ import sys
 import socket
 import time
 import struct
+import pcapy
 
+pcap = None
 file = None
 
 def viewer ():
@@ -74,63 +76,118 @@ def viewer ():
 		print_instructions()
 		sys.exit()
 
+	pcapy.findalldevs()
+	max_bytes = 1024
+	promiscuous = False
+	read_timeout = 100 # in milliseconds
+	cap = pcapy.open_live(interface, max_bytes, promiscuous, read_timeout)
+	#cap = pcapy.open_live(interface, 65536 , 1 , 0)
+	print 'viewer: listening on ' + interface
+	#start sniffing packets
+	if (flag_used['c']):
+		packets_sniffed = 0
+		while packets_sniffed < count:
+			(header, packet) = cap.next()
+			if header:
+				to_print = parse_packet(packet)
+				print to_print
+				packets_sniffed = packets_sniffed + 1
+	else:	
+		while True:
+			(header, packet) = cap.next()
+			if header:
+				to_print = parse_packet(packet)
+				print to_print	
+			#print ('%s: captured %d bytes, truncated to %d bytes' %(datetime.datetime.now(), header.getlen(), header.getcaplen()))
+			#parse_packet(packet)
+
+def eth_addr (a) :
+    b = "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x" % (ord(a[0]) , ord(a[1]) , ord(a[2]), ord(a[3]), ord(a[4]) , ord(a[5]))
+    return b
+
+def parse_packet (packet):
+	to_print = ''
+	#parse ethernet header
+	eth_length = 14
+	eth_header = packet[:eth_length]
+	eth = struct.unpack('!6s6sH' , eth_header)
+	eth_protocol = socket.ntohs(eth[2])
+	print 'Destination MAC : ' + eth_addr(packet[0:6]) + ' Source MAC : ' + eth_addr(packet[6:12]) + ' Protocol : ' + str(eth_protocol)
+ 
+	#Parse IP packets, IP Protocol number = 8
+	if eth_protocol == 8 :
+		#Parse IP header
+		#take first 20 characters for the ip header
+		ip_header = packet[eth_length:20+eth_length]
+		 
+		#now unpack them :)
+		iph = struct.unpack('!BBHHHBBH4s4s' , ip_header)
+ 
+		version_ihl = iph[0]
+		version = version_ihl >> 4
+		ihl = version_ihl & 0xF
+ 
+		iph_length = ihl * 4
+ 
+		ttl = iph[5]
+		protocol = iph[6]
+		s_addr = socket.inet_ntoa(iph[8]);
+		d_addr = socket.inet_ntoa(iph[9]);
+ 
+		print 'Version : ' + str(version) + ' IP Header Length : ' + str(ihl) + ' TTL : ' + str(ttl) + ' Protocol : ' + str(protocol) + ' Source Address : ' + str(s_addr) + ' Destination Address : ' + str(d_addr)
+ 
+	u = iph_length + eth_length
+	icmph_length = 4
+	icmp_header = packet[u:u+4]
+
+	#now unpack them :)
+	icmph = struct.unpack('!BBH' , icmp_header)
+	 
+	icmp_type = icmph[0]
+	code = icmph[1]
+	checksum = icmph[2]
+	 
+	print 'Type : ' + str(icmp_type) + ' Code : ' + str(code) + ' Checksum : ' + str(checksum)
+	 
+	h_size = eth_length + iph_length + icmph_length
+	data_size = len(packet) - h_size
+	 
+	#get data from the packet
+	data = packet[h_size:]
+	 
+	print 'Data : ' + data
 
 
-	# Attempt to create the socket using SOCK_RAW.
-	try:
-		connection = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-		connection.bind((destination, 0))
-	except socket.error, msg:
-		print 'Socket could not be created. Error code: ' + str(msg[0]) + ' Message: ' + msg[1]
-		sys.exit()
 
-	print 'Pinging ' + destination + ' with ' + str(len(payload)) + ' bytes of data \"' + payload + '\"'
 
-	source = socket.gethostbyname(socket.gethostname())
-	timeout = 1
-
-	for num in range(int(count)):
-		payload = struct.pack('!HH', 1234, num) + payload
-		connection.connect((destination, 80))
-		connection.sendall(b'\x08\0' + checksum(b'\x08\0\0\0' + payload) + payload)
-		start = time.time()
-
-		while select.select([connection], [], [], max(0, start + timeout - time.time()))[0]:
-				data = connection.recv(65536)
-				if len(data) < 20 or len(data) < struct.unpack_from('!xxH', data)[0]:
-					continue
-				if data[20:] == b'\0\0' + checksum(b'\0\0\0\0' + payload) + payload:
-					print time.time() - start
-					break
-
+	return 
 
 def check_validity (flags, i, r, c, l):
+	global pcap, file
 	if flags['i']:
+		if flags['c']:
+			if c < 0:
+				print 'Count must be at least 0.'
+				return False
+		if flags['r']:
+			try:
+				pcap = open(r, 'r')
+			except:
+				print 'Invalid pcap file.'
+				return False
 		if flags['l']:
 			try:
 				file = open(l, 'w')
-				return True
 			except:
 				print 'Invalid logfile.'
 				return False
-		else:
-			return True
+		return True
 	else:
-		print 'Validity check failed'
-
-		if (flags['i']):
-			print 'int: ' + i
-		if (flags['r']):
-			print 'read: ' + r
-		if (flags['c']):
-			print 'count: ' + c
-		if (flags['l']):
-			print 'logfile: ' + l
+		print 'Interface flag required.'
 		return False
 
-
 def print_instructions ():
-	print 'viewer [-l logfile] -i interface -c N –r filename'
+	print 'viewer -i interface [-r filename] [-c N] [-l logfile]'
 	print '\t-i, --int  	Listen on the specified interface'
 	print '\t-r, --read  	Read the pcap file and print packets'
 	print '\t-c, --count    Print N number of packets and quit'
