@@ -6,27 +6,26 @@ Alan Coon
 alancoon@usc.edu
 '''
 
-import os
 import sys
 import socket
 import time
 import struct
-import select
 
-def pinger ():
+
+def viewer ():
 	# Make a dictionary to keep track of which flags have been used in the 
 	# command line call.
 	flag_used = {}
-	flag_used['d'] = False
-	flag_used['p'] = False
-	flag_used['l'] = False
+	flag_used['i'] = False
+	flag_used['r'] = False
 	flag_used['c'] = False
+	flag_used['l'] = False
 
 	# Instantiate the variables.
-	logfile 	= None
-	payload 	= None
+	interface 	= None
+	read	 	= None
 	count  		= None
-	destination = None
+	logfile		= None
 
 	# Parse through the command line call.
 	for index, word in enumerate(sys.argv):
@@ -47,21 +46,21 @@ def pinger ():
 				sys.exit()
 
 			# Each flag can be substituted in for their fullname.
-			if (flag == 'd' or flag == '-dst'):
-				destination = next_arg
-				flag_used['d'] = True
+			if (flag == 'i' or flag == '-int'):
+				interface = next_arg
+				flag_used['i'] = True
 
-			elif (flag == 'p' or flag == '-payload'):
-				payload = next_arg
-				flag_used['p'] = True
-
-			elif (flag == 'l' or flag == '-logfile'):
-				logfile = next_arg
-				flag_used['l'] = True
+			elif (flag == 'r' or flag == '-read'):
+				read = next_arg
+				flag_used['r'] = True
 
 			elif (flag == 'c' or flag == '-count'):
 				count = next_arg
 				flag_used['c'] = True
+
+			elif (flag == 'l' or flag == '-logfile'):
+				logfile = next_arg
+				flag_used['l'] = True
 
 			# If the flag doesn't exist, print instructions and cleanly terminate.
 			else:
@@ -69,27 +68,7 @@ def pinger ():
 				sys.exit()
 
 	# Check to see if the user entered a valid combination of flags.
-	check_validity(flag_used, destination, payload, logfile, count)
-
-	for i in range(count):
-		icmp = socket.getprotobyname('icmp')
-		try:
-			connection = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
-		except socket.error, (errno, msg):
-			if (errno == 1):
-				msg = msg + ' – Please run again with root privilege.'
-				raise socket.error(msg)
-			else:
-				raise
-		my_id = os.getpid() & 0xFFFF
-		# Hardcode the ping size to 64.
-		send_ping(connection, destination, my_id, 64) 
-		# Receive with hardcoded timeout of 2.
-		delay = receive_response(connection, my_id, 2)
-
-		connection.close()
-		print 'delay: ' + str(delay)
-
+	check_validity(flag_used, interface, read, count, logfile)
 
 	# Attempt to create the socket using SOCK_RAW.
 	try:
@@ -119,38 +98,34 @@ def pinger ():
 					break
 
 
-def check_validity (flags, d, p, l, c):
+def check_validity (flags, i, r, c, l):
 	print flags
-	if flags['c'] and flags['p'] and flags['d']:
+	if flags['i']: # and flags['r'] and flags['c']:
 		print 'Validity check passed'
 	else:
 		print 'Validity check failed'
-		if (flags['l']):
-			print 'logfile: ' + l
-		if (flags['p']):
-			print 'payload: ' + p
+
+		if (flags['i']):
+			print 'int: ' + i
+		if (flags['r']):
+			print 'read: ' + r
 		if (flags['c']):
 			print 'count: ' + c
-		if (flags['d']):
-			print 'destination: ' + d
+		if (flags['l']):
+			print 'logfile: ' + l
 		print_instructions()
 		sys.exit()
 
-def checksum(data):
-    x = sum(x << 8 if i % 2 else int(x) for i, x in enumerate(data)) & 0xFFFFFFFF
-    x = (x >> 16) + (x & 0xFFFF)
-    x = (x >> 16) + (x & 0xFFFF)
-    return struct.pack('<H', ~x & 0xFFFF)
 
 def print_instructions ():
-	print 'pinger [-l file] -p \"data\" -c N -d IP'
-	print '\t-l, --logfile  Write the debug info to the specified log file'
-	print '\t-p, --payload  The string to include in the payload'
-	print '\t-c, --count    The number of packets used to compute RTT'
-	print '\t-d, --dst      The destination IP for the ping message'
+	print 'viewer [-l logfile] -i interface -c N –r filename'
+	print '\t-i, --int  	Listen on the specified interface'
+	print '\t-r, --read  	Read the pcap file and print packets'
+	print '\t-c, --count    Print N number of packets and quit'
+	print '\t-l, --logfile  Write debug info to the specified log'
 
 def main ():
-	pinger()
+	viewer()
 
 if __name__ == "__main__":
 	main()
