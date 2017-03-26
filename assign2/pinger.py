@@ -69,7 +69,10 @@ def pinger ():
 				sys.exit()
 
 	# Check to see if the user entered a valid combination of flags.
-	check_validity(flag_used, destination, payload, logfile, count)
+	valid = validify_input(flag_used, destination, payload, logfile, count)
+	if not valid:
+		print_instructions()
+		sys.exit()
 
 	for i in range(count):
 		icmp = socket.getprotobyname('icmp')
@@ -77,7 +80,7 @@ def pinger ():
 			connection = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
 		except socket.error, (errno, msg):
 			if (errno == 1):
-				msg = msg + ' – Please run again with root privilege.'
+				msg = msg + ' - Please run again with root privilege.'
 				raise socket.error(msg)
 			else:
 				raise
@@ -90,39 +93,10 @@ def pinger ():
 		connection.close()
 		print 'delay: ' + str(delay)
 
-
-	# Attempt to create the socket using SOCK_RAW.
-	try:
-		connection = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-		connection.bind((destination, 0))
-	except socket.error, msg:
-		print 'Socket could not be created. Error code: ' + str(msg[0]) + ' Message: ' + msg[1]
-		sys.exit()
-
-	print 'Pinging ' + destination + ' with ' + str(len(payload)) + ' bytes of data \"' + payload + '\"'
-
-	source = socket.gethostbyname(socket.gethostname())
-	timeout = 1
-
-	for num in range(int(count)):
-		payload = struct.pack('!HH', 1234, num) + payload
-		connection.connect((destination, 80))
-		connection.sendall(b'\x08\0' + checksum(b'\x08\0\0\0' + payload) + payload)
-		start = time.time()
-
-		while select.select([connection], [], [], max(0, start + timeout - time.time()))[0]:
-				data = connection.recv(65536)
-				if len(data) < 20 or len(data) < struct.unpack_from('!xxH', data)[0]:
-					continue
-				if data[20:] == b'\0\0' + checksum(b'\0\0\0\0' + payload) + payload:
-					print time.time() - start
-					break
-
-
-def check_validity (flags, d, p, l, c):
+def validify_input (flags, d, p, l, c):
 	print flags
 	if flags['c'] and flags['p'] and flags['d']:
-		print 'Validity check passed'
+		return True
 	else:
 		print 'Validity check failed'
 		if (flags['l']):
@@ -133,14 +107,78 @@ def check_validity (flags, d, p, l, c):
 			print 'count: ' + c
 		if (flags['d']):
 			print 'destination: ' + d
-		print_instructions()
-		sys.exit()
+		return False
 
-def checksum(data):
-    x = sum(x << 8 if i % 2 else int(x) for i, x in enumerate(data)) & 0xFFFFFFFF
-    x = (x >> 16) + (x & 0xFFFF)
-    x = (x >> 16) + (x & 0xFFFF)
-    return struct.pack('<H', ~x & 0xFFFF)
+def send_ping (connection, destination, id, packet_size):
+	destination = socket.gethostbyname(destination)
+
+	packet_size = packet_size - 8
+
+	my_checksum = 0
+
+	header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, my_checksum, id, 1)
+	bytes = struct.calcsize('d')
+	data = (packet_size - bytes) * 'Q'
+	data = struct.pack('d', time.time()) + data
+
+	my_checksum = checksum(header + data)
+
+	header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, socket.htons(my_checksum), id, 1)
+    packet = header + data
+    connection.sendto(packet, (destination, 1)) # Don't know about the 1
+
+def receive_response (connection, id, timeout):
+    """
+    Receive the ping from the socket.
+    """
+    time_left = timeout
+    while True:
+        started_select = time.time()
+        what_ready = select.select([my_socket], [], [], time_left)
+        how_long_in_select = (time.time() - started_select)
+        if what_ready[0] == []: # Timeout
+            return
+
+        time_received = time.time()
+        received_packet, addr = my_socket.recvfrom(1024)
+        icmpHeader = received_packet[20:28]
+        type, code, checksum, packet_id, sequence = struct.unpack(
+            "bbHHh", icmpHeader
+        )
+        if packet_id == id:
+            bytes = struct.calcsize("d")
+            time_sent = struct.unpack("d", received_packet[28:28 + bytes])[0]
+            return time_received - time_sent
+
+        time_left = time_left - how_long_in_select
+        if time_left <= 0:
+            return
+
+def checksum(source_string):
+    """
+    I'm not too confident that this is right but testing seems
+    to suggest that it gives the same answers as in_cksum in ping.c
+    """
+    sum = 0
+    count_to = (len(source_string) / 2) * 2
+    for count in xrange(0, count_to, 2):
+        this = ord(source_string[count + 1]) * 256 + ord(source_string[count])
+        sum = sum + this
+        sum = sum & 0xffffffff # Necessary?
+
+    if count_to < len(source_string):
+        sum = sum + ord(source_string[len(source_string) - 1])
+        sum = sum & 0xffffffff # Necessary?
+
+    sum = (sum >> 16) + (sum & 0xffff)
+    sum = sum + (sum >> 16)
+    answer = ~sum
+    answer = answer & 0xffff
+
+    # Swap bytes. Bugger me if I know why.
+    answer = answer >> 8 | (answer << 8 & 0xff00)
+
+    return answer
 
 def print_instructions ():
 	print 'pinger [-l file] -p \"data\" -c N -d IP'
