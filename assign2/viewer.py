@@ -11,6 +11,7 @@ import socket
 import time 
 import struct
 import pcapy
+from datetime import datetime
 
 pcap = None
 file = None
@@ -82,6 +83,8 @@ def viewer ():
 	read_timeout = 100 # in milliseconds
 	cap = pcapy.open_live(interface, max_bytes, promiscuous, read_timeout)
 	print 'viewer: listening on ' + interface
+	if file:
+		file.write('viewer: listening on ' + interface + '\n')
 	#start sniffing packets
 	if (flag_used['c']):
 		packets_sniffed = 0
@@ -163,13 +166,12 @@ def parse_packet (packet):
 			if code == 0:
 				if icmp_type == 0:
 					echo_type = 'reply'
-					time_stamp =  time.time()
-					#print time_stamp
+					time_stamp = str(time.time()).split('.')[0] + '.' + str(datetime.now()).split('.')[1]
 					to_print = str(time_stamp) + ' ' + str(s_addr) + ' > ' + str(d_addr) + ': ICMP echo ' + echo_type + ', id ' + str(identifier) + ', length ' + str(data_size)
 					return to_print
 				elif icmp_type == 8:
 					echo_type = 'request'
-					time_stamp = time.time()
+					time_stamp = str(time.time()).split('.')[0] + '.' + str(datetime.now()).split('.')[1]
 					to_print = str(time_stamp) + ' ' + str(s_addr) + ' > ' + str(d_addr) + ': ICMP echo ' + echo_type + ', id ' + str(identifier) + ', length ' + str(data_size)
 					return to_print
 			else:
