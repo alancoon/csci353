@@ -8,7 +8,7 @@ alancoon@usc.edu
 
 import sys
 import socket
-import time
+import time 
 import struct
 import pcapy
 
@@ -81,7 +81,6 @@ def viewer ():
 	promiscuous = False
 	read_timeout = 100 # in milliseconds
 	cap = pcapy.open_live(interface, max_bytes, promiscuous, read_timeout)
-	#cap = pcapy.open_live(interface, 65536 , 1 , 0)
 	print 'viewer: listening on ' + interface
 	#start sniffing packets
 	if (flag_used['c']):
@@ -90,37 +89,39 @@ def viewer ():
 			(header, packet) = cap.next()
 			if header:
 				to_print = parse_packet(packet)
-				print to_print
+				if to_print:
+					print to_print
+					if file:
+						file.write(to_print + '\n')
 				packets_sniffed = packets_sniffed + 1
 	else:	
 		while True:
 			(header, packet) = cap.next()
 			if header:
 				to_print = parse_packet(packet)
-				print to_print	
-			#print ('%s: captured %d bytes, truncated to %d bytes' %(datetime.datetime.now(), header.getlen(), header.getcaplen()))
-			#parse_packet(packet)
+				if to_print:
+					print to_print	
+					if file:
+						file.write(to_print + '\n')
 
 def eth_addr (a) :
     b = "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x" % (ord(a[0]) , ord(a[1]) , ord(a[2]), ord(a[3]), ord(a[4]) , ord(a[5]))
     return b
 
 def parse_packet (packet):
-	to_print = ''
-	#parse ethernet header
+	# Parse ethernet header.
 	eth_length = 14
 	eth_header = packet[:eth_length]
 	eth = struct.unpack('!6s6sH' , eth_header)
 	eth_protocol = socket.ntohs(eth[2])
-	print 'Destination MAC : ' + eth_addr(packet[0:6]) + ' Source MAC : ' + eth_addr(packet[6:12]) + ' Protocol : ' + str(eth_protocol)
- 
+	#print 'Destination MAC : ' + eth_addr(packet[0:6]) + ' Source MAC : ' + eth_addr(packet[6:12]) + ' Protocol : ' + str(eth_protocol)
+
 	#Parse IP packets, IP Protocol number = 8
 	if eth_protocol == 8 :
 		#Parse IP header
 		#take first 20 characters for the ip header
 		ip_header = packet[eth_length:20+eth_length]
 		 
-		#now unpack them :)
 		iph = struct.unpack('!BBHHHBBH4s4s' , ip_header)
  
 		version_ihl = iph[0]
@@ -134,33 +135,46 @@ def parse_packet (packet):
 		s_addr = socket.inet_ntoa(iph[8]);
 		d_addr = socket.inet_ntoa(iph[9]);
  
-		print 'Version : ' + str(version) + ' IP Header Length : ' + str(ihl) + ' TTL : ' + str(ttl) + ' Protocol : ' + str(protocol) + ' Source Address : ' + str(s_addr) + ' Destination Address : ' + str(d_addr)
- 
-	u = iph_length + eth_length
-	icmph_length = 4
-	icmp_header = packet[u:u+4]
+		#print 'Version : ' + str(version) + ' IP Header Length : ' + str(ihl) + ' TTL : ' + str(ttl) + ' Protocol : ' + str(protocol) + ' Source Address : ' + str(s_addr) + ' Destination Address : ' + str(d_addr)
+ 	
+	 	if protocol:
+			u = iph_length + eth_length
+			icmph_length = 4 + 4
+			icmp_header = packet[u:u + icmph_length]
 
-	#now unpack them :)
-	icmph = struct.unpack('!BBH' , icmp_header)
-	 
-	icmp_type = icmph[0]
-	code = icmph[1]
-	checksum = icmph[2]
-	 
-	print 'Type : ' + str(icmp_type) + ' Code : ' + str(code) + ' Checksum : ' + str(checksum)
-	 
-	h_size = eth_length + iph_length + icmph_length
-	data_size = len(packet) - h_size
-	 
-	#get data from the packet
-	data = packet[h_size:]
-	 
-	print 'Data : ' + data
+			icmph = struct.unpack('!BBHHH' , icmp_header)
+			 
+			icmp_type = icmph[0]
+			code = icmph[1]
+			checksum = icmph[2]
+			identifier = icmph[3]
+			seq_number = icmph[4]
 
+			#print 'icmp_type' + str(icmp_type)
+			#print 'code ' + str(code)
 
+			echo_type = ''
+			
+			h_size = eth_length + iph_length + icmph_length
+			data_size = len(packet) - h_size
+			 
+			data = packet[h_size:]
 
+			if code == 0:
+				if icmp_type == 0:
+					echo_type = 'reply'
+					time_stamp =  time.time()
+					#print time_stamp
+					to_print = str(time_stamp) + ' ' + str(s_addr) + ' > ' + str(d_addr) + ': ICMP echo ' + echo_type + ', id ' + str(identifier) + ', length ' + str(data_size)
+					return to_print
+				elif icmp_type == 8:
+					echo_type = 'request'
+					time_stamp = time.time()
+					to_print = str(time_stamp) + ' ' + str(s_addr) + ' > ' + str(d_addr) + ': ICMP echo ' + echo_type + ', id ' + str(identifier) + ', length ' + str(data_size)
+					return to_print
+			else:
+				return ''
 
-	return 
 
 def check_validity (flags, i, r, c, l):
 	global pcap, file
