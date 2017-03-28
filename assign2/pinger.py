@@ -101,7 +101,7 @@ def pinger ():
 		send_ping(connection, destination, my_id, payload) 
 
 		# Receive with hardcoded timeout of 2.
-		(delay, data) = receive_response(connection, my_id, 2)
+		(delay, data, TTL) = receive_response(connection, my_id, 2)
 		
 		if delay == -1:
 			# No response, we timed out.
@@ -112,7 +112,6 @@ def pinger ():
 			# We received a response.
 			milliseconds = int(delay * 1000)
 			no_bytes = len(data)
-			TTL = 47
 			connection.close()
 			print '  Reply from ' + destination + ': bytes=' + str(no_bytes) + ' time=' + str(milliseconds) + 'ms TTL=' + str(TTL)
 			if file:
@@ -176,32 +175,38 @@ def send_ping (connection, destination, my_id, payload):
 
 	connection.sendto(packet, (destination, 1)) 
 
-def receive_response (connection, id, timeout):
+def receive_response (connection, id_no, timeout):
 
 	time_left = timeout
 	while True:
 		started_select = time.time()
-		what_ready = select.select([connection], [], [], time_left)
-		how_long_in_select = (time.time() - started_select)
-		if what_ready[0] == []: # Timeout
-			return (-1, None)
+		ready = select.select([connection], [], [], time_left)
+		wait_time = (time.time() - started_select)
+		if ready[0] == []: # Timeout
+			return (-1, None, -1)
 
 		time_received = time.time()
-		received_packet, addr = connection.recvfrom(1024)
-		icmpHeader = received_packet[20:28]
+		received_packet, address = connection.recvfrom(1024)
+		#print received_packet
+		ttl_start = 33
+
+		ip_header = received_packet[ttl_start:ttl_start+1]
+		#print ip_header
+		ip_header = struct.unpack('B', ip_header)
+		TTL = ip_header[0]
+
+		icmp_header = received_packet[20:28]
 		data = received_packet[36:]
-		type, code, checksum, packet_id, sequence = struct.unpack(
-			'bbHHh', icmpHeader
-		)
+		icmp_type, code, checksum, identifier, sequence = struct.unpack('bbHHh', icmp_header)
 
-		if packet_id == id:
-			bytes = struct.calcsize('d')
-			time_sent = struct.unpack('d', received_packet[28:28 + bytes])[0]
-			return (time_received - time_sent, data)
+		if identifier == id_no:
+			packet_bytes = struct.calcsize('d')
+			time_sent = struct.unpack('d', received_packet[28:28 + packet_bytes])[0]
+			return (time_received - time_sent, data, TTL)
 
-		time_left = time_left - how_long_in_select
+		time_left = time_left - wait_time
 		if time_left <= 0:
-			return (-1, None)
+			return (-1, None, -1)
 
 def checksum(data):
 	sum = 0

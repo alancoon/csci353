@@ -11,6 +11,7 @@ import socket
 import time 
 import struct
 import pcapy
+#import dpkt
 from datetime import datetime
 
 pcap = None
@@ -85,7 +86,7 @@ def viewer ():
 	print 'viewer: listening on ' + interface
 	if file:
 		file.write('viewer: listening on ' + interface + '\n')
-	#start sniffing packets
+	# Start sniffing packets, if c flag is specified then only sniff N packets.
 	if (flag_used['c']):
 		packets_sniffed = 0
 		while packets_sniffed < count:
@@ -97,6 +98,7 @@ def viewer ():
 					if file:
 						file.write(to_print + '\n')
 				packets_sniffed = packets_sniffed + 1
+	# Otherwise we sniff packets forever.
 	else:	
 		while True:
 			(header, packet) = cap.next()
@@ -113,66 +115,51 @@ def eth_addr (a) :
 
 def parse_packet (packet):
 	# Parse ethernet header.
-	eth_length = 14
-	eth_header = packet[:eth_length]
+	eth_header_length = 14
+	eth_header = packet[:eth_header_length]
 	eth = struct.unpack('!6s6sH' , eth_header)
 	eth_protocol = socket.ntohs(eth[2])
-	#print 'Destination MAC : ' + eth_addr(packet[0:6]) + ' Source MAC : ' + eth_addr(packet[6:12]) + ' Protocol : ' + str(eth_protocol)
 
 	#Parse IP packets, IP Protocol number = 8
 	if eth_protocol == 8 :
 		#Parse IP header
 		#take first 20 characters for the ip header
-		ip_header = packet[eth_length:20+eth_length]
+		ip_header = packet[eth_header_length:20 + eth_header_length]
 		 
-		iph = struct.unpack('!BBHHHBBH4s4s' , ip_header)
+		ip_header = struct.unpack('!BBHHHBBH4s4s' , ip_header)
  
-		version_ihl = iph[0]
+		version_ihl = ip_header[0]
 		version = version_ihl >> 4
 		ihl = version_ihl & 0xF
  
-		iph_length = ihl * 4
+		ip_header_length = ihl * 4
  
-		ttl = iph[5]
-		protocol = iph[6]
-		s_addr = socket.inet_ntoa(iph[8]);
-		d_addr = socket.inet_ntoa(iph[9]);
- 
-		#print 'Version : ' + str(version) + ' IP Header Length : ' + str(ihl) + ' TTL : ' + str(ttl) + ' Protocol : ' + str(protocol) + ' Source Address : ' + str(s_addr) + ' Destination Address : ' + str(d_addr)
- 	
+		protocol = ip_header[6]
+		source_address = socket.inet_ntoa(ip_header[8]);
+		destination_address = socket.inet_ntoa(ip_header[9]);
+  	
 	 	if protocol:
-			u = iph_length + eth_length
-			icmph_length = 4 + 4
-			icmp_header = packet[u:u + icmph_length]
-
-			icmph = struct.unpack('!BBHHH' , icmp_header)
-			 
-			icmp_type = icmph[0]
-			code = icmph[1]
-			checksum = icmph[2]
-			identifier = icmph[3]
-			seq_number = icmph[4]
-
-			#print 'icmp_type' + str(icmp_type)
-			#print 'code ' + str(code)
-
-			echo_type = ''
-			
-			h_size = eth_length + iph_length + icmph_length
-			data_size = len(packet) - h_size
-			 
-			data = packet[h_size:]
+			icmp_header_length = 8
+			ip_eth_length = ip_header_length + eth_header_length
+			icmp_header = packet[ip_eth_length:ip_eth_length + icmp_header_length]
+			icmp_header = struct.unpack('!BBHHH', icmp_header)
+			icmp_type = icmp_header[0]
+			code = icmp_header[1]
+			identifier = icmp_header[3]
+			header_length = eth_header_length + ip_header_length + icmp_header_length
+			data_size = len(packet) - header_length
+			data = packet[header_length:]
 
 			if code == 0:
 				if icmp_type == 0:
 					echo_type = 'reply'
 					time_stamp = str(time.time()).split('.')[0] + '.' + str(datetime.now()).split('.')[1]
-					to_print = str(time_stamp) + ' ' + str(s_addr) + ' > ' + str(d_addr) + ': ICMP echo ' + echo_type + ', id ' + str(identifier) + ', length ' + str(data_size)
+					to_print = str(time_stamp) + ' ' + str(source_address) + ' > ' + str(destination_address) + ': ICMP echo ' + echo_type + ', id ' + str(identifier) + ', length ' + str(data_size)
 					return to_print
 				elif icmp_type == 8:
 					echo_type = 'request'
 					time_stamp = str(time.time()).split('.')[0] + '.' + str(datetime.now()).split('.')[1]
-					to_print = str(time_stamp) + ' ' + str(s_addr) + ' > ' + str(d_addr) + ': ICMP echo ' + echo_type + ', id ' + str(identifier) + ', length ' + str(data_size)
+					to_print = str(time_stamp) + ' ' + str(source_address) + ' > ' + str(destination_address) + ': ICMP echo ' + echo_type + ', id ' + str(identifier) + ', length ' + str(data_size)
 					return to_print
 			else:
 				return ''
@@ -188,6 +175,7 @@ def check_validity (flags, i, r, c, l):
 		if flags['r']:
 			try:
 				pcap = open(r, 'r')
+				#pcap = dpkt.pcap.Reader(f)
 			except:
 				print 'Invalid pcap file.'
 				return False
