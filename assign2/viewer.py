@@ -12,9 +12,15 @@ import time
 import struct
 import pcapy
 import dpkt
+from dpkt.compat import compat_ord
+from dpkt import pcap
+from dpkt import ip
+from dpkt import ethernet
 from datetime import datetime
+from dpkt.compat import compat_ord
 
-pcap = None
+
+pcap_obj = None
 pcap_file = None
 file = None
 
@@ -110,18 +116,27 @@ def viewer ():
 						if file:
 							file.write(to_print + '\n')
 	elif flag_used['r']:
-		print '/////////////////////////R FLAG/////////////////////////'
-		for ts, buf in pcap:
-   			eth = dpkt.ethernet.Ethernet(buf)
-    		print '/////////////////////////BEFORE ETH/////////////////////////'
-    		print '>>>>>>>>>>ETH>>>>>>>>:'
-    		print eth
-    		ip = eth.data
-    		print '/////////////////////////BEFORE IP/////////////////////////'
-    		print '>>>>>>>>>>IP>>>>>>>>>:' + ip
-    		#tcp = ip.data
-    		print '/////////////////////////BEFORE TCP/////////////////////////'
-    		#print '>>>>>>>>>>TCP>>>>>>>>:' + tcp
+		#dpkt.examples.print_packets(pcap_obj)
+		for time_stamp, buf in pcap_obj:
+			print str(datetime.utcfromtimestamp(time_stamp))
+
+			eth = ethernet.Ethernet(buf)
+			print 'Ethernet Frame: ', mac_addr(eth.src), mac_addr(eth.dst), eth.type	
+    		
+
+			if not isinstance(eth.data, dpkt.ip.IP):
+				print 'Non IP packet not supported %s\n' % eth.data.__class__.__name__
+				continue
+
+    		ip_portion = eth.data
+
+    		#do_not_fragment = bool(ip.off & dpkt.ip.IP_DF)
+    		#more_fragments = bool(ip.off & dpkt.ip.IP_MF)
+    		#fragment_offset = ip.off & dpkt.ip.IP_OFFMASK
+
+    		#print 'IP: %s > %s (len=%d ttl=%d DF=%d MF=%d offset=%d)\n' % (inet_to_str(ip_portion.src), inet_to_str(ip_portion.dst), ip_portion.len, ip_portion.ttl, do_not_fragment, more_fragments, fragment_offset)
+    		print 'IP: %s > %s (len=%d ttl=%d)\n' % (inet_to_str(ip_portion.src), inet_to_str(ip_portion.dst), ip_portion.len, ip_portion.ttl)
+
     		'''
     		if tcp.dport == 80 and len(tcp.data) > 0:
         		http = dpkt.http.Request(tcp.data)
@@ -130,6 +145,30 @@ def viewer ():
         			file.write(http.uri + '\n')
         	'''
 		pcap_file.close()
+
+def mac_addr(address):
+    """Convert a MAC address to a readable/printable string
+
+       Args:
+           address (str): a MAC address in hex form (e.g. '\x01\x02\x03\x04\x05\x06')
+       Returns:
+           str: Printable/readable MAC address
+    """
+    return ':'.join('%02x' % compat_ord(b) for b in address)
+
+def inet_to_str(inet):
+    """Convert inet object to a string
+
+        Args:
+            inet (inet struct): inet network address
+        Returns:
+            str: Printable/readable IP address
+    """
+    # First try ipv4 and then ipv6
+    try:
+        return socket.inet_ntop(socket.AF_INET, inet)
+    except ValueError:
+        return socket.inet_ntop(socket.AF_INET6, inet)
 
 def eth_addr (a) :
     b = "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x" % (ord(a[0]) , ord(a[1]) , ord(a[2]), ord(a[3]), ord(a[4]) , ord(a[5]))
@@ -187,7 +226,7 @@ def parse_packet (packet):
 
 
 def check_validity (flags, i, r, c, l):
-	global pcap, file, pcap_file
+	global pcap_obj, file, pcap_file
 	if flags['i']:
 		if flags['c']:
 			if c < 0:
@@ -209,10 +248,11 @@ def check_validity (flags, i, r, c, l):
 				print 'Count flag is unnecessary for reading from a pcap file.'
 				print 'Ignoring -c flag.'
 			pcap_file = open(r, 'r')
-			pcap = dpkt.pcap.Reader(pcap_file)
+			pcap_obj = pcap.Reader(pcap_file)
 			return True
 		except:
 			print 'Invalid pcap file.'
+			raise
 			return False
 	else:
 		print 'Interface or read flag required.'
