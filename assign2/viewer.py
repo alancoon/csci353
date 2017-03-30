@@ -11,10 +11,11 @@ import socket
 import time 
 import struct
 import pcapy
-#import dpkt
+import dpkt
 from datetime import datetime
 
 pcap = None
+pcap_file = None
 file = None
 
 def viewer ():
@@ -77,37 +78,58 @@ def viewer ():
 	if not valid:
 		print_instructions()
 		sys.exit()
-
-	pcapy.findalldevs()
-	max_bytes = 1024
-	promiscuous = False
-	read_timeout = 100 # in milliseconds
-	cap = pcapy.open_live(interface, max_bytes, promiscuous, read_timeout)
-	print 'viewer: listening on ' + interface
-	if file:
-		file.write('viewer: listening on ' + interface + '\n')
-	# Start sniffing packets, if c flag is specified then only sniff N packets.
-	if (flag_used['c']):
-		packets_sniffed = 0
-		while packets_sniffed < count:
-			(header, packet) = cap.next()
-			if header:
-				to_print = parse_packet(packet)
-				if to_print:
-					print to_print
-					if file:
-						file.write(to_print + '\n')
-				packets_sniffed = packets_sniffed + 1
-	# Otherwise we sniff packets forever.
-	else:	
-		while True:
-			(header, packet) = cap.next()
-			if header:
-				to_print = parse_packet(packet)
-				if to_print:
-					print to_print	
-					if file:
-						file.write(to_print + '\n')
+	if flag_used['i']:
+		pcapy.findalldevs()
+		max_bytes = 1024
+		promiscuous = False
+		read_timeout = 100 # in milliseconds
+		cap = pcapy.open_live(interface, max_bytes, promiscuous, read_timeout)
+		print 'viewer: listening on ' + interface
+		if file:
+			file.write('viewer: listening on ' + interface + '\n')
+		# Start sniffing packets, if c flag is specified then only sniff N packets.
+		if (flag_used['c']):
+			packets_sniffed = 0
+			while packets_sniffed < count:
+				(header, packet) = cap.next()
+				if header:
+					to_print = parse_packet(packet)
+					if to_print:
+						print to_print
+						if file:
+							file.write(to_print + '\n')
+					packets_sniffed = packets_sniffed + 1
+		# Otherwise we sniff packets forever.
+		else:	
+			while True:
+				(header, packet) = cap.next()
+				if header:
+					to_print = parse_packet(packet)
+					if to_print:
+						print to_print	
+						if file:
+							file.write(to_print + '\n')
+	elif flag_used['r']:
+		print '/////////////////////////R FLAG/////////////////////////'
+		for ts, buf in pcap:
+   			eth = dpkt.ethernet.Ethernet(buf)
+    		print '/////////////////////////BEFORE ETH/////////////////////////'
+    		print '>>>>>>>>>>ETH>>>>>>>>:'
+    		print eth
+    		ip = eth.data
+    		print '/////////////////////////BEFORE IP/////////////////////////'
+    		print '>>>>>>>>>>IP>>>>>>>>>:' + ip
+    		#tcp = ip.data
+    		print '/////////////////////////BEFORE TCP/////////////////////////'
+    		#print '>>>>>>>>>>TCP>>>>>>>>:' + tcp
+    		'''
+    		if tcp.dport == 80 and len(tcp.data) > 0:
+        		http = dpkt.http.Request(tcp.data)
+        		print http.uri
+        		if flag_used['l']:
+        			file.write(http.uri + '\n')
+        	'''
+		pcap_file.close()
 
 def eth_addr (a) :
     b = "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x" % (ord(a[0]) , ord(a[1]) , ord(a[2]), ord(a[3]), ord(a[4]) , ord(a[5]))
@@ -122,8 +144,7 @@ def parse_packet (packet):
 
 	#Parse IP packets, IP Protocol number = 8
 	if eth_protocol == 8 :
-		#Parse IP header
-		#take first 20 characters for the ip header
+		# Parse IP header
 		ip_header = packet[eth_header_length:20 + eth_header_length]
 		 
 		ip_header = struct.unpack('!BBHHHBBH4s4s' , ip_header)
@@ -166,19 +187,15 @@ def parse_packet (packet):
 
 
 def check_validity (flags, i, r, c, l):
-	global pcap, file
+	global pcap, file, pcap_file
 	if flags['i']:
 		if flags['c']:
 			if c < 0:
 				print 'Count must be at least 0.'
 				return False
 		if flags['r']:
-			try:
-				pcap = open(r, 'r')
-				#pcap = dpkt.pcap.Reader(f)
-			except:
-				print 'Invalid pcap file.'
-				return False
+			print 'Read and interface flags must be used exclusively.'
+			return False
 		if flags['l']:
 			try:
 				file = open(l, 'w')
@@ -186,8 +203,19 @@ def check_validity (flags, i, r, c, l):
 				print 'Invalid logfile.'
 				return False
 		return True
+	elif flags['r']:
+		try:
+			if flags['c']:
+				print 'Count flag is unnecessary for reading from a pcap file.'
+				print 'Ignoring -c flag.'
+			pcap_file = open(r, 'r')
+			pcap = dpkt.pcap.Reader(pcap_file)
+			return True
+		except:
+			print 'Invalid pcap file.'
+			return False
 	else:
-		print 'Interface flag required.'
+		print 'Interface or read flag required.'
 		return False
 
 def print_instructions ():
