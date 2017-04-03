@@ -12,13 +12,12 @@ import time
 import struct
 import pcapy
 import dpkt
+# I'm not sure how importing works because I'm getting inconsistent resutls.
 from dpkt.compat import compat_ord
 from dpkt import pcap
 from dpkt import ip
 from dpkt import ethernet
 from datetime import datetime
-from dpkt.compat import compat_ord
-
 
 pcap_obj = None
 pcap_file = None
@@ -86,17 +85,14 @@ def viewer ():
 		sys.exit()
 	if flag_used['i']:
 		pcapy.findalldevs()
-		max_bytes = 1024
-		promiscuous = False
-		read_timeout = 100 # in milliseconds
-		cap = pcapy.open_live(interface, max_bytes, promiscuous, read_timeout)
+		cap = pcapy.open_live(interface, 1024, False, 100) # 100 millisecond timeout
 		print 'viewer: listening on ' + interface
 		if file:
 			file.write('viewer: listening on ' + interface + '\n')
 		# Start sniffing packets, if c flag is specified then only sniff N packets.
+		packets_sniffed = 0
 		if (flag_used['c']):
-			packets_sniffed = 0
-			while packets_sniffed < count:
+			while int(packets_sniffed) < int(count):
 				(header, packet) = cap.next()
 				if header:
 					to_print = parse_packet(packet)
@@ -104,7 +100,8 @@ def viewer ():
 						print to_print
 						if file:
 							file.write(to_print + '\n')
-					packets_sniffed = packets_sniffed + 1
+						packets_sniffed = packets_sniffed + 1
+
 		# Otherwise we sniff packets forever.
 		else:	
 			while True:
@@ -116,100 +113,119 @@ def viewer ():
 						if file:
 							file.write(to_print + '\n')
 	elif flag_used['r']:
-		#dpkt.examples.print_packets(pcap_obj)
-		for time_stamp, buf in pcap_obj:
-			print str(datetime.utcfromtimestamp(time_stamp))
+		# For each packet in the pcap process the contents
+		pcap = pcap_obj
+		packets_sniffed = 0
+		for timestamp, buf in pcap:
+			# Procedure for using the dpkt library to parse pcap files is borrowed from
+			# dpkt documentation, as well as several supplementary subroutines. 
+			# Get the microseconds from the UTC time, and the time since epoch using
+			# the plain timestamp.  Concatenate them together.
+			microseconds = str(datetime.utcfromtimestamp(timestamp)).split('.')[1]
+			seconds = str(timestamp).split('.')[0]
+			time = seconds + '.' + microseconds
 
-			eth = ethernet.Ethernet(buf)
-			print 'Ethernet Frame: ', mac_addr(eth.src), mac_addr(eth.dst), eth.type	
-    		
+			# Start concatenating the string that we're going to print.
+			to_print = time
 
+			# Unpack the Ethernet frame.
+			eth = dpkt.ethernet.Ethernet(buf)
+
+			# Make sure the Ethernet frame contains an IP packet.
+			# If it doesn't, print an explanation and skip over this iteration.
 			if not isinstance(eth.data, dpkt.ip.IP):
-				print 'Non IP packet not supported %s\n' % eth.data.__class__.__name__
+				print 'Non IP Packet type not supported %s' % eth.data.__class__.__name__
+				if file:
+					file.write('Non IP Packet type not supported ' + eth.data.__class__.__name__ + '\n')
 				continue
 
-    		ip_portion = eth.data
+			# Now unpack the data within the Ethernet frame (the IP packet).
+			# Pulling out src, dst, length, fragment info, TTL, and Protocol.
+			ip = eth.data
 
-    		#do_not_fragment = bool(ip.off & dpkt.ip.IP_DF)
-    		#more_fragments = bool(ip.off & dpkt.ip.IP_MF)
-    		#fragment_offset = ip.off & dpkt.ip.IP_OFFMASK
+			if isinstance(ip.data, dpkt.icmp.ICMP):
+				icmp = ip.data
 
-    		#print 'IP: %s > %s (len=%d ttl=%d DF=%d MF=%d offset=%d)\n' % (inet_to_str(ip_portion.src), inet_to_str(ip_portion.dst), ip_portion.len, ip_portion.ttl, do_not_fragment, more_fragments, fragment_offset)
-    		print 'IP: %s > %s (len=%d ttl=%d)\n' % (inet_to_str(ip_portion.src), inet_to_str(ip_portion.dst), ip_portion.len, ip_portion.ttl)
+				# Pull out fragment information (flags and offset all packed into off field, so use bitmasks)
+				do_not_fragment = bool(ip.off & dpkt.ip.IP_DF)
+				more_fragments = bool(ip.off & dpkt.ip.IP_MF)
+				fragment_offset = ip.off & dpkt.ip.IP_OFFMASK
 
-    		'''
-    		if tcp.dport == 80 and len(tcp.data) > 0:
-        		http = dpkt.http.Request(tcp.data)
-        		print http.uri
-        		if flag_used['l']:
-        			file.write(http.uri + '\n')
-        	'''
-		pcap_file.close()
+				# Add the IP addresses to the string.
+				to_print = to_print + ' ' + inet_to_str(ip.src) + ' > ' + inet_to_str(ip.dst) + ': '
+				
+				# Add whether it's an echo request or reply.
+				if (icmp.type == 0 and icmp.code == 0):
+					to_print = to_print + 'ICMP echo reply, '
+				elif (icmp.type == 8 and icmp.code == 0):
+					to_print = to_print + 'ICMP echo request, '
+
+				# The ID number is embedded within the data so we need to parse a little to get it.
+				icmp_data = repr(icmp.data)
+				icmp_id = icmp_data.split(',')[0][8:]
+
+				# Finalize the print string.
+				to_print = to_print + 'id ' + icmp_id + ', length ' + str(ip.len)
+
+				# Finish it off.
+				print to_print
+				if file:
+					file.write(to_print + '\n')
+
+				# Increment the number of packets sniffed if the -c flag was used.
+				if flag_used['c']:
+					packets_sniffed = packets_sniffed + 1
+					if not packets_sniffed < int(count):
+						if file:
+							file.close()
+						if pcap_file:
+							pcap_file.close()
+						sys.exit()
 
 def mac_addr(address):
-    """Convert a MAC address to a readable/printable string
-
-       Args:
-           address (str): a MAC address in hex form (e.g. '\x01\x02\x03\x04\x05\x06')
-       Returns:
-           str: Printable/readable MAC address
-    """
-    return ':'.join('%02x' % compat_ord(b) for b in address)
+	''' Borrowed. '''
+	return ':'.join('%02x' % compat_ord(b) for b in address)
 
 def inet_to_str(inet):
-    """Convert inet object to a string
-
-        Args:
-            inet (inet struct): inet network address
-        Returns:
-            str: Printable/readable IP address
-    """
-    # First try ipv4 and then ipv6
-    try:
-        return socket.inet_ntop(socket.AF_INET, inet)
-    except ValueError:
-        return socket.inet_ntop(socket.AF_INET6, inet)
-
-def eth_addr (a) :
-    b = "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x" % (ord(a[0]) , ord(a[1]) , ord(a[2]), ord(a[3]), ord(a[4]) , ord(a[5]))
-    return b
+	''' Borrowed. '''
+	try:
+		return socket.inet_ntop(socket.AF_INET, inet)
+	except ValueError:
+		return socket.inet_ntop(socket.AF_INET6, inet)
 
 def parse_packet (packet):
 	# Parse ethernet header.
-	eth_header_length = 14
-	eth_header = packet[:eth_header_length]
+	eth_header = packet[:14]
 	eth = struct.unpack('!6s6sH' , eth_header)
 	eth_protocol = socket.ntohs(eth[2])
 
-	#Parse IP packets, IP Protocol number = 8
+	# The IP we are looking for is 8.
 	if eth_protocol == 8 :
-		# Parse IP header
-		ip_header = packet[eth_header_length:20 + eth_header_length]
-		 
+		# Unpack the IP header for information.
+		ip_header = packet[14:34]
 		ip_header = struct.unpack('!BBHHHBBH4s4s' , ip_header)
- 
 		version_ihl = ip_header[0]
 		version = version_ihl >> 4
 		ihl = version_ihl & 0xF
- 
 		ip_header_length = ihl * 4
- 
 		protocol = ip_header[6]
 		source_address = socket.inet_ntoa(ip_header[8]);
 		destination_address = socket.inet_ntoa(ip_header[9]);
-  	
-	 	if protocol:
-			icmp_header_length = 8
-			ip_eth_length = ip_header_length + eth_header_length
-			icmp_header = packet[ip_eth_length:ip_eth_length + icmp_header_length]
+	
+		# If the protcol is 1 (ICMP):
+		if protocol:
+			# Unpack the ICMP header for information we need.
+			ip_eth_length = ip_header_length + 14
+			icmp_header = packet[ip_eth_length:ip_eth_length + 8]
 			icmp_header = struct.unpack('!BBHHH', icmp_header)
 			icmp_type = icmp_header[0]
 			code = icmp_header[1]
 			identifier = icmp_header[3]
-			header_length = eth_header_length + ip_header_length + icmp_header_length
+			header_length = 14 + ip_header_length + 8
 			data_size = len(packet) - header_length
 			data = packet[header_length:]
 
+			# Both have code of 0 but reply has a type of 0 and request has a type of 8.
 			if code == 0:
 				if icmp_type == 0:
 					echo_type = 'reply'
@@ -244,9 +260,12 @@ def check_validity (flags, i, r, c, l):
 		return True
 	elif flags['r']:
 		try:
-			if flags['c']:
-				print 'Count flag is unnecessary for reading from a pcap file.'
-				print 'Ignoring -c flag.'
+			if flags['l']:
+				try:
+					file = open(l, 'w')
+				except:
+					print 'Invalid logfile.'
+					return False
 			pcap_file = open(r, 'r')
 			pcap_obj = pcap.Reader(pcap_file)
 			return True
@@ -259,14 +278,21 @@ def check_validity (flags, i, r, c, l):
 		return False
 
 def print_instructions ():
-	print 'viewer -i interface [-r filename] [-c N] [-l logfile]'
+	print './viewer.py -i interface [-r filename] [-c N] [-l logfile]'
 	print '\t-i, --int  	Listen on the specified interface'
 	print '\t-r, --read  	Read the pcap file and print packets'
 	print '\t-c, --count    Print N number of packets and quit'
 	print '\t-l, --logfile  Write debug info to the specified log'
+	print 'Only use each flag once at most.'
 
 def main ():
-	viewer()
+	try:
+		viewer()
+	except KeyboardInterrupt:
+		if file:
+			file.close()
+		if pcap_file:
+			pcap_file.close()
 
 if __name__ == "__main__":
 	main()

@@ -13,7 +13,6 @@ import time
 import struct
 import select
 
-ICMP_ECHO_REQUEST = 8
 file = None
 
 def pinger ():
@@ -164,37 +163,42 @@ def send_ping (connection, destination, my_id, payload):
 		print 'Invalid IP or address.'
 		sys.exit()
 
+	# Set up the packet.
 	packet_size = len(payload) - 8
 	my_checksum = 0
 
-	header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, my_checksum, my_id, 1)
+	# Pack it up.
+	# ICMP_ECHO_REQUEST is 8.
+	header = struct.pack('bbHHh', 8, 0, my_checksum, my_id, 1)
 	data = struct.pack('d', time.time()) + payload
 	my_checksum = checksum(header + data)
-	header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, socket.htons(my_checksum), my_id, 1)
+	header = struct.pack('bbHHh', 8, 0, socket.htons(my_checksum), my_id, 1)
 	packet = header + data
 
+	# Send out the packet.
 	connection.sendto(packet, (destination, 1)) 
 
 def receive_response (connection, id_no, timeout):
-
 	time_left = timeout
 	while True:
 		started_select = time.time()
 		ready = select.select([connection], [], [], time_left)
 		wait_time = (time.time() - started_select)
-		if ready[0] == []: # Timeout
+
+		# If the ready list is empty then we timeout.
+		if ready[0] == []: 
 			return (-1, None, -1)
 
+		# Begin the "stopwatch" as we receive the packet.
 		time_received = time.time()
 		received_packet, address = connection.recvfrom(1024)
-		#print received_packet
-		ttl_start = 33
-
-		ip_header = received_packet[ttl_start:ttl_start+1]
-		#print ip_header
+		
+		# Get TTL.
+		ip_header = received_packet[33:34]
 		ip_header = struct.unpack('B', ip_header)
 		TTL = ip_header[0]
 
+		# Get data from the ICMP header.
 		icmp_header = received_packet[20:28]
 		data = received_packet[36:]
 		icmp_type, code, checksum, identifier, sequence = struct.unpack('bbHHh', icmp_header)
@@ -205,6 +209,8 @@ def receive_response (connection, id_no, timeout):
 			return (time_received - time_sent, data, TTL)
 
 		time_left = time_left - wait_time
+
+		# Another timeout check.
 		if time_left <= 0:
 			return (-1, None, -1)
 
@@ -214,28 +220,24 @@ def checksum(data):
 	for count in xrange(0, count_to, 2):
 		this = ord(data[count + 1]) * 256 + ord(data[count])
 		sum = sum + this
-		#sum = sum & 0xffffffff # Necessary?
 
 	if count_to < len(data):
 		sum = sum + ord(data[len(data) - 1])
-		#sum = sum & 0xffffffff # Necessary?
 
 	sum = (sum >> 16) + (sum & 0xffff)
 	sum = sum + (sum >> 16)
 	answer = ~sum
 	answer = answer & 0xffff
-
-	# Swap bytes. Bugger me if I know why.
 	answer = answer >> 8 | (answer << 8 & 0xff00)
-
 	return answer
 
 def print_instructions ():
-	print 'pinger -d IP -c N -p \"data\" [-l file]'
+	print './pinger.py -d IP -c N -p \"data\" [-l file]'
 	print '\t-d, --dst      The destination IP for the ping message'
 	print '\t-c, --count    The number of packets used to compute RTT'
 	print '\t-p, --payload  The string to include in the payload'
 	print '\t-l, --logfile  Write the debug info to the specified log file'
+	print 'Only use each flag once at most.'
 
 def main ():
 	pinger()
