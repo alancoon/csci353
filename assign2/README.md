@@ -28,19 +28,19 @@ I also use pcapy for the pinger.
 To run the pinger, enter the following into your terminal:
 
 
-sudo ./pinger.py -d IP -c N -p "data" [-l file]
+    sudo ./pinger.py -d IP -c N -p "data" [-l file]
 
 
-    -d, --dst      The destination IP for the ping message
+        -d, --dst      The destination IP for the ping message
 
 
-    -c, --count    The number of packets used to compute RTT
+        -c, --count    The number of packets used to compute RTT
 
 
-    -p, --payload  The string to include in the payload
+        -p, --payload  The string to include in the payload
 
 
-    -l, --logfile  (Optional) Write the debug info to the specified log file
+        -l, --logfile  (Optional) Write the debug info to the specified log file
 
 
 Only use each flag once at most.  Use sudo because root access is required to make your own packets.
@@ -52,19 +52,19 @@ Only use each flag once at most.  Use sudo because root access is required to ma
 To run the viewer, enter the following into your terminal:
 
 
-./viewer.py [-i interface] [-r filename] [-c N] [-l logfile]
+    ./viewer.py [-i interface] [-r filename] [-c N] [-l logfile]
 
 
-    -i, --int       (*) Listen on the specified interface
+        -i, --int       (*) Listen on the specified interface
 
 
-    -r, --read  	(*) Read the pcap file and print packets
+        -r, --read  	(*) Read the pcap file and print packets
 
 
-    -c, --count     (Optional) Print N number of packets and quit
+        -c, --count     (Optional) Print N number of packets and quit
 
 
-    -l, --logfile   (Optional) Write debug info to the specified log
+        -l, --logfile   (Optional) Write debug info to the specified log
 
 
 Only use each flag once at most. If no count flag is specified for the viewer, it will execute indefinitely or until the end of the pcap file.
