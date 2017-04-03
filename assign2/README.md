@@ -10,6 +10,12 @@ alancoon@usc.edu
 7561574891
 
 
+# Language and Version
+
+
+I am using Python 2.7.10 for this assignment.
+
+
 # Dependencies
 
 
