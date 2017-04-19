@@ -1,0 +1,14 @@
+Question 1 - What are the final statistics for the ping command on the loopless
+topology?
+--- 10.0.0.4 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9015ms
+rtt min/avg/max/mdev = 6.988/9.784/20.283/4.594 ms
+
+Question 2 - What are the same statistics on the topology with loops?
+--- 10.0.0.4 ping statistics ---
+10 packets transmitted, 5 received, +23 duplicates, 50% packet loss, time 9018ms
+rtt min/avg/max/mdev = 1249.801/7503.005/14639.488/3684.966 ms, pipe 7
+
+Question 3 - In 1-2 sentences, what causes any differences in the ping results on the
+loopless vs loop-y topology?
+Because each node floods the network with any packet it receives with the dumb controller, the self-loops cause duplicate ACKs to reach the source host.  The self-loops also cause some packets to get stuck in an infinite loop until their TTL expires and they never reach the source. 
