@@ -11,13 +11,59 @@ from ryu.lib.packet import ether_types
 from topology import load_topology
 import networkx as nx
 
+
+# Generates the edges of the minimum spanning tree through Prim's algorithm.
+# Portions of code borrowed from NetworkX documentation.
+def get_edges(graph):
+    unvisited_nodes = graph.nodes()
+    while unvisited_nodes:
+        u = unvisited_nodes.pop(0)
+        neighbors = []
+        visited_nodes = []
+        for u, v in graph.edges(u):
+            neighbors.append((u, v))
+        while neighbors:
+            (u, v) = neighbors.pop(0)
+            if v in visited_nodes:
+                continue
+            visited_nodes.append(v)
+            try:
+                unvisited_nodes.remove(v)
+            except:
+                pass
+            for v, w in graph.edges(v):
+                if w not in visited_nodes:
+                    neighbors.append((v, w))
+            yield (u, v)
+
+
 # This function takes as input a networkx graph. It then computes
 # the minimum Spanning Tree, and returns it, as a networkx graph.
+# Uses the subroutine get_edges(graph) to generate the edges of the minimum spanning tree
+# via Prim's algorithm, then checks to see if all of the nodes are present.
+# Then it copies all of the data associated with the nodes ('ports', 'mactoport') and returns the
+# new spanning tree.
+# Portions of code borrowed from NetworkX documentation.
 def compute_spanning_tree(G):
+    # The Spanning Tree of G.
+    edges = get_edges(G)
+    ST = nx.Graph(edges)
+    if len(ST) != len(G):
+        ST.add_nodes_from([n for n, d in G.degree().items() if d == 0])
 
-    # The Spanning Tree of G
-    ST = nx.minimum_spanning_tree(G)
-
+    # Copy over the relevant ports.
+    for n in ST:
+        ST.node[n]['ports'] = {}
+        for machine, port in G.node[n]['ports'].items():
+            if machine != 'host':
+                edges = []
+                for edge in ST[n]:
+                    edges.append(edge)
+                if int(machine) in edges:
+                    ST.node[n]['ports'][machine] = port
+            elif machine == 'host':
+                ST.node[n]['ports'][machine] = port
+    ST.graph = G.graph.copy()
     return ST
 
 class L2Forwarding(app_manager.RyuApp):
@@ -38,8 +84,6 @@ class L2Forwarding(app_manager.RyuApp):
         print self.get_str_topo(self.G)
         print self.get_str_topo(self.ST)
 
-        print nx.get_node_attributes(self.ST, 'ports')
-        print nx.get_node_attributes(self.G, 'ports')
     # This method returns a string that describes a graph (nodes and edges, with
     # their attributes). You do not need to modify this method.
     def get_str_topo(self, graph):
@@ -95,13 +139,13 @@ class L2Forwarding(app_manager.RyuApp):
 
     # Ignore LLDP packet types.
         if eth.ethertype == ether_types.ETH_TYPE_LLDP:
-            print 'LLDP ignored.'
             return
 
     # Grab the MAC addresses of the source and destination.
         dst = eth.dst
         src = eth.src
-        print '\n\n/////////////// MACHINE ' + str(dpid) + ' ///////////////'
+        print '\n\n'
+        print '/////////////// MACHINE ' + str(dpid) + ' ///////////////'
 
 
     # Associate the source MAC address with the port number we received the message from.
@@ -134,8 +178,7 @@ class L2Forwarding(app_manager.RyuApp):
     # Flood the neighbors of the Spanning Tree.
             print '\nNo entry of ' + dst + ' on ' + str(dpid) + ', flooding network'
             print self.ST.node[dpid]['ports']
-            print nx.get_node_attributes(self.ST, 'ports')[dpid]
-            print nx.get_node_attributes(self.G,  'ports')[dpid]
+            #neighbors = nx.get_node_attributes(self.ST, 'ports')
             #print neighbors
 
             #  out_port = ofproto.OFPP_FLOOD
@@ -148,25 +191,6 @@ class L2Forwarding(app_manager.RyuApp):
             datapath.send_msg(out)
             '''
             print 'iterating over above dict, sending to each neighbor'
-            print self.ST.edges()
-
-            neighbors = self.get_ST_neighbors(self.ST, dpid)
-            print neighbors
-            for machine in neighbors:
-                port = self.ST.node[dpid]['ports'][machine]
-                if msg.in_port != port:
-                    print 'Sending to machine ' + machine + ' over port ' + str(port)
-                    actions = [datapath.ofproto_parser.OFPActionOutput(port)]
-                    out = datapath.ofproto_parser.OFPPacketOut(
-                        datapath=datapath, buffer_id=msg.buffer_id, in_port=msg.in_port,
-                        actions=actions, data=data
-                    )
-                    datapath.send_msg(out)
-                else:
-                    print 'Not sending back to the sender, machine ' + machine
-            print 'Done with for loop'
-
-            '''
             for machine, port in self.ST.node[dpid]['ports'].items():
                 if msg.in_port != port:
                     print 'sending to machine ' + machine + ' over port ' + str(port)
@@ -178,19 +202,9 @@ class L2Forwarding(app_manager.RyuApp):
                 else:
                     print 'not sending back to the sender'
             print 'done with for loop'
-            '''
 
 
-    def get_ST_neighbors(self, graph, dpid):
-        neighbors = []
-        for (u, v) in graph.edges():
-            if u == dpid or v == dpid:
-                if u == dpid:
-                    neighbors.append(str(v))
-                else:
-                    neighbors.append(str(u))
-        neighbors.append('host')
-        return neighbors
+
 
     def add_flow(self, datapath, in_port, dst, actions):
         ofproto = datapath.ofproto
