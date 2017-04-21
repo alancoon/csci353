@@ -1,0 +1,8 @@
+Question 5 - Describe how your algorithm works. If it has a name, also give the name.
+I use Prim’s algorithm, but without using any edge weight comparisons.  It works by creating a list of all of the nodes we have not inspected yet in the graph, which should be all of them since we just started.  Now pick a node arbitrarily, and add all of its neighbors to a list.  For each neighbor, check if we have already visited that node, if yes then ignore it.  Otherwise, add the neighbor to the visited nodes list, and add all of the neighbor’s neighbors that haven’t been visited to the list of neighbors we are inspecting.  Add the edge between the original node and the neighbor to a list of edges that will define the spanning tree.  Repeat until we have visited all nodes.  
+
+Question 6 - Show the complexity of your algorithm in Big-O notation. Considered variables n as the # of nodes, m as the # of links, s as the # of switches and d as the maximum number of interfaces in a switch.
+Prim’s algorithm is known to be O(n^2).  You visit all nodes in the graph, which is represented by n, and for each of those nodes you inspect each of their neighbors which accumulates to another n.  We multiply the two n’s together and get n^2.
+
+Question 7 - Give one advantage of a centralized algorithm (like yours) over a distributed algorithm (like STP). Give one disadvantage of centralized over distributed.
+A centralized algorithm would have knowledge of the entire topology, which can lend advantages over a distributed algorithm.  However, a distributed algorithm takes less overhead space and computation. 
