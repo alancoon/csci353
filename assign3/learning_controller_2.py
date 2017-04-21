@@ -125,9 +125,59 @@ class L2Forwarding(app_manager.RyuApp):
     # a new entry on the switch's forwarding table if necessary
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
+        msg = ev.msg
+        datapath = msg.datapath
+        ofproto = datapath.ofproto
+        # This is the ID of the current node we are on.
+        dpid = datapath.id
+        # Getting the IP addresses of the source and destination through the ethernet header.
+        pkt = packet.Packet(msg.data)
+        eth = pkt.get_protocol(ethernet.ethernet)
+        # Ignore LLDP packet types.
+        if eth.ethertype == ether_types.ETH_TYPE_LLDP:
+            return
+            # Grab the MAC addresses of the source and destination.
+        dst = eth.dst
+        src = eth.src
+        # Associate the source MAC address with the port number we received the message from.
+        self.G.node[dpid]['mactoport'][src] = msg.in_port
+        # Declare an empty actions list to append ports to.
+        actions = []
+        # Check if the destination is in the node's MAC address dictionary.
+        if dst in self.G.node[dpid]['mactoport']:
+            out_port = self.G.node[dpid]['mactoport'][dst]
+            actions.append(datapath.ofproto_parser.OFPActionOutput(out_port))
+            # Add a flow.
+            self.add_flow(datapath, msg.in_port, dst, actions)
+            out = datapath.ofproto_parser.OFPPacketOut(
+                datapath=datapath, buffer_id=msg.buffer_id, in_port=msg.in_port,
+                actions=actions)
+            datapath.send_msg(out)
+            # Flood the neighbors of the Spanning Tree.
+        else:
+            neighbors = self.get_ST_neighbors(self.ST, dpid)
+            for machine in neighbors:
+                if machine != 'host':
+                    port = self.ST.node[dpid]['ports'][machine]
+                    if msg.in_port != port:
+                        actions.append(datapath.ofproto_parser.OFPActionOutput(port))
+            actions.append(datapath.ofproto_parser.OFPActionOutput(self.ST.node[dpid]['ports']['host']))
+            out = datapath.ofproto_parser.OFPPacketOut(
+                datapath=datapath, buffer_id=msg.buffer_id,
+                in_port=msg.in_port, actions=actions
+            )
+            datapath.send_msg(out)
 
-
-
+    def get_ST_neighbors(self, graph, dpid):
+        neighbors = []
+        for (u, v) in graph.edges():
+            if u == dpid or v == dpid:
+                if u == dpid:
+                    neighbors.append(str(v))
+                else:
+                    neighbors.append(str(u))
+        neighbors.append('host')
+        return neighbors
 
     def add_flow(self, datapath, in_port, dst, actions):
         ofproto = datapath.ofproto
