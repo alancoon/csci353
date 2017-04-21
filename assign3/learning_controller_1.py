@@ -98,11 +98,14 @@ class L2Forwarding(app_manager.RyuApp):
             print 'LLDP ignored.'
             return
 
+
     # Grab the MAC addresses of the source and destination.
         dst = eth.dst
         src = eth.src
-        print '\n\n/////////////// MACHINE ' + str(dpid) + ' ///////////////'
 
+        print '\n\n/////////////// MACHINE ' + str(dpid) + ' ///////////////'
+        print 'SOURCE: ' + src
+        print 'DEST  : ' + dst
 
     # Associate the source MAC address with the port number we received the message from.
         # if src not in self.G.node[dpid]['mactoport']:
@@ -116,69 +119,52 @@ class L2Forwarding(app_manager.RyuApp):
         if msg.buffer_id == ofproto.OFP_NO_BUFFER:
             data = msg.data
 
+
+    # Declare an empty actions list to append ports to.
+        actions = []
     # Check if the destination is in the node's MAC address dictionary.
         if dst in self.G.node[dpid]['mactoport']:
             out_port =  self.G.node[dpid]['mactoport'][dst]
-            print('Entry exists', str(out_port), 'from', dpid)
-            actions = [datapath.ofproto_parser.OFPActionOutput(out_port)]
-
+            print 'Entry exists for port ' + str(out_port)
+            actions.append(datapath.ofproto_parser.OFPActionOutput(out_port))
     # Add a flow.
             self.add_flow(datapath, msg.in_port, dst, actions)
 
             out = datapath.ofproto_parser.OFPPacketOut(
                 datapath=datapath, buffer_id=msg.buffer_id, in_port=msg.in_port,
-                actions=actions, data=data)
+                actions=actions)
 
             datapath.send_msg(out)
-        else:
+
     # Flood the neighbors of the Spanning Tree.
+        else:
             print '\nNo entry of ' + dst + ' on ' + str(dpid) + ', flooding network'
-            print self.ST.node[dpid]['ports']
-            print nx.get_node_attributes(self.ST, 'ports')[dpid]
-            print nx.get_node_attributes(self.G,  'ports')[dpid]
+            #print self.ST.node[dpid]['ports']
+            #print nx.get_node_attributes(self.ST, 'ports')[dpid]
+            #print nx.get_node_attributes(self.G,  'ports')[dpid]
             #print neighbors
 
             #  out_port = ofproto.OFPP_FLOOD
-            '''
-            actions = [datapath.ofproto_parser.OFPActionOutput(self.ST.node[dpid]['ports']['host'])]
-            print 'sending to ' + str(self.ST.node[dpid]['ports']['host'])
-            out = datapath.ofproto_parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id, in_port=msg.in_port, actions=actions, data=data)
 
-
-            datapath.send_msg(out)
-            '''
-            print 'iterating over above dict, sending to each neighbor'
-            print self.ST.edges()
-
+            print 'iterating over above dict, sending to each neighbor\nneighbors:'
             neighbors = self.get_ST_neighbors(self.ST, dpid)
             print neighbors
             for machine in neighbors:
-                port = self.ST.node[dpid]['ports'][machine]
-                if msg.in_port != port:
-                    print 'Sending to machine ' + machine + ' over port ' + str(port)
-                    actions = [datapath.ofproto_parser.OFPActionOutput(port)]
-                    out = datapath.ofproto_parser.OFPPacketOut(
-                        datapath=datapath, buffer_id=msg.buffer_id, in_port=msg.in_port,
-                        actions=actions, data=data
-                    )
-                    datapath.send_msg(out)
-                else:
-                    print 'Not sending back to the sender, machine ' + machine
-            print 'Done with for loop'
+                if machine != 'host':
+                    port = self.ST.node[dpid]['ports'][machine]
+                    if msg.in_port != port:
+                        print 'Sending to machine ' + machine + ' over port ' + str(port)
+                        actions.append(datapath.ofproto_parser.OFPActionOutput(port))
+                    else:
+                        print 'Not sending back to the sender, machine ' + machine
 
-            '''
-            for machine, port in self.ST.node[dpid]['ports'].items():
-                if msg.in_port != port:
-                    print 'sending to machine ' + machine + ' over port ' + str(port)
-                    actions = [datapath.ofproto_parser.OFPActionOutput(port)]
-                    out = datapath.ofproto_parser.OFPPacketOut(
-                        datapath=datapath, buffer_id=msg.buffer_id, in_port=msg.in_port,
-                        actions=actions, data=data)
-                    datapath.send_msg(out)
-                else:
-                    print 'not sending back to the sender'
-            print 'done with for loop'
-            '''
+            print 'Done with for loop, sending out'
+            actions.append(datapath.ofproto_parser.OFPActionOutput(self.ST.node[dpid]['ports']['host']))
+            out = datapath.ofproto_parser.OFPPacketOut(
+                datapath=datapath, buffer_id=msg.buffer_id,
+                in_port=msg.in_port, actions=actions
+            )
+            datapath.send_msg(out)
 
 
     def get_ST_neighbors(self, graph, dpid):
